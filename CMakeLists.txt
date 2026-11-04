@@ -37,7 +37,16 @@ endif()
 
 target_sources(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE src/plugin-main.cpp src/stacks-dock.cpp src/stacks-dock.hpp src/icon-library.cpp src/icon-library.hpp
+  PRIVATE
+    src/plugin-main.cpp
+    src/stacks-dock.cpp
+    src/stacks-dock.hpp
+    src/icon-library.cpp
+    src/icon-library.hpp
+    src/scene-actions.cpp
+    src/scene-actions.hpp
+    src/backup-store.cpp
+    src/backup-store.hpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

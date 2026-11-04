@@ -38,6 +38,15 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 - Optional hiding of the native Scenes dock, from the Stacks menu at any time
 - The Stacks dock has no close button, like the native Scenes dock, so it cannot be closed by accident
 - Keyboard: F2 or Return renames, Delete or Backspace deletes (with confirmation for scenes)
+- Collapsed stacks show the PGM / PVW badge of the scene they hide; optional "Reveal the scene on Program"
+- Studio Mode: "Send to Program" in the context menu (disabled while a transition runs)
+- Missing scenes: kept so undo can restore them, optionally shown, "Clean up missing scenes", caps 200 (notice) / 2,000 (oldest trimmed)
+- Rolling backups of the organization per scene collection (10 kept, at most one every 5 minutes) and "Restore a backup…"
+- Native scene actions: Duplicate, Filters, Scene Projector, Screenshot, Show in Multiview, per-scene Transition Override
+- Inline rename (F2 / Return), Ctrl/Cmd+F or / to search, Alt+Up/Down to move, Down / Return from the search field to reach results
+- Spacer separators (an empty gap)
+- Color display: strip + tinted stacks, strip, tinted rows, or dot
+- Display options: show icons, PGM / PVW badges, scene count per stack
 - English and French UI
 - Organization saved inside the scene collection, matched by scene UUID with a name fallback
 

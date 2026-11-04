@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "stacks-dock.hpp"
 #include "icon-library.hpp"
+#include "scene-actions.hpp"
+#include "backup-store.hpp"
 
 #include <QAction>
 #include <QColorDialog>
@@ -38,6 +40,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QFile>
 #include <QFileDialog>
 #include <QSet>
+#include <QDateTime>
+#include <QKeyEvent>
+#include <QLabel>
 #include <QShortcut>
 #include <QVBoxLayout>
 
@@ -60,6 +65,8 @@ constexpr const char *kModuleKey = "obs-stacks";
 constexpr const char *kConfigSection = "obs-stacks";
 constexpr int kSchemaVersion = 1;
 constexpr int kMaxDepth = 4;
+constexpr int kTombstoneSoftCap = 200;
+constexpr int kTombstoneHardCap = 2000;
 
 QString T(const char *key)
 {
@@ -199,7 +206,9 @@ QSize StacksDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelI
 {
 	QSize s = QStyledItemDelegate::sizeHint(option, index);
 	const Kind k = static_cast<Kind>(index.data(KindRole).toInt());
-	if (k == Kind::Separator)
+	if (k == Kind::Separator && index.data(SeparatorStyleRole).toString() == QLatin1String("spacer"))
+		s.setHeight(compact ? 8 : 14);
+	else if (k == Kind::Separator)
 		s.setHeight(index.data(Qt::DisplayRole).toString().isEmpty() ? (compact ? 6 : 10)
 									     : (compact ? 16 : 20));
 	else
@@ -217,6 +226,10 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 		painter->save();
 		if (option.state & QStyle::State_Selected)
 			painter->fillRect(option.rect, pal.highlight().color().darker(150));
+		if (index.data(SeparatorStyleRole).toString() == QLatin1String("spacer")) {
+			painter->restore();
+			return; /* an empty gap */
+		}
 		const QString label = index.data(Qt::DisplayRole).toString();
 		QColor line = color.isValid() ? color : pal.text().color();
 		line.setAlphaF(color.isValid() ? 0.9 : 0.35);
@@ -248,7 +261,7 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 	QStyleOptionViewItem opt(option);
 	initStyleOption(&opt, index);
 
-	const QString iconName = index.data(IconRole).toString();
+	const QString iconName = showIcons ? index.data(IconRole).toString() : QString();
 	if (!iconName.isEmpty()) {
 		const QColor tint = color.isValid() ? color : pal.text().color();
 		const int px = compact ? 14 : 16;
@@ -259,40 +272,66 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 		}
 	}
 
-	const bool program = index.data(ProgramRole).toBool();
-	const bool preview = index.data(PreviewRole).toBool();
+	const bool isProgramScene = index.data(ProgramRole).toBool();
+	/* A collapsed stack shows the badge of the scene it hides. */
+	const bool program = showBadges && (isProgramScene || index.data(ContainsProgramRole).toBool());
+	const bool preview = showBadges && !program &&
+			     (index.data(PreviewRole).toBool() || index.data(ContainsPreviewRole).toBool());
 	const bool favorite = index.data(FavoriteRole).toBool();
+	const bool missing = index.data(MissingRole).toBool();
 	const bool isGroup = (k == Kind::Stack || k == Kind::Unsorted || k == Kind::Favorites);
+	const int count = (showCounts && k == Kind::Stack) ? index.data(CountRole).toInt() : -1;
+
+	if (missing) {
+		opt.font.setItalic(true);
+		QColor faded = pal.text().color();
+		faded.setAlphaF(0.45);
+		opt.palette.setColor(QPalette::Text, faded);
+	}
 
 	if (isGroup) {
 		opt.font.setBold(true);
 		if (k == Kind::Unsorted)
 			opt.font.setItalic(true);
 	}
-	if (program)
+	if (isProgramScene)
 		opt.font.setBold(true);
 
-	/* Tinted background for colored stacks. */
-	if (k == Kind::Stack && color.isValid() && !(opt.state & QStyle::State_Selected)) {
+	/* Color display mode: strip + tinted stacks, strip, tint, or dot. */
+	const bool tintStack = colorMode == 0 || colorMode == 2;
+	const bool tintScene = colorMode == 2;
+	if (color.isValid() && !(opt.state & QStyle::State_Selected) &&
+	    ((k == Kind::Stack && tintStack) || (k == Kind::Scene && tintScene))) {
 		QColor tint = color;
-		tint.setAlphaF(0.16);
+		tint.setAlphaF(k == Kind::Stack ? 0.16 : 0.12);
 		painter->fillRect(option.rect, tint);
 	}
 
-	/* Leave room for the color strip and the badges. */
+	/* Leave room for the color mark, the badges, the count and the star. */
 	const int badgeW = (program || preview) ? 42 : 0;
 	const int favW = favorite ? 16 : 0;
-	opt.rect.adjust(8, 0, -(badgeW + favW + 4), 0);
+	QString countText;
+	int countW = 0;
+	if (count >= 0) {
+		countText = QString::number(count);
+		countW = QFontMetrics(option.font).horizontalAdvance(countText) + 10;
+	}
+	opt.rect.adjust(colorMode == 3 ? 16 : 8, 0, -(badgeW + favW + countW + 4), 0);
 	QStyledItemDelegate::paint(painter, opt, index);
 
 	painter->save();
 	painter->setRenderHint(QPainter::Antialiasing, true);
 
-	if (color.isValid()) {
+	if (color.isValid() && (colorMode == 0 || colorMode == 1)) {
 		const QRect strip(option.rect.left() + 2, option.rect.top() + 4, 3, option.rect.height() - 8);
 		QPainterPath path;
 		path.addRoundedRect(strip, 1.5, 1.5);
 		painter->fillPath(path, color);
+	} else if (color.isValid() && colorMode == 3) {
+		const int d = 8;
+		painter->setPen(Qt::NoPen);
+		painter->setBrush(color);
+		painter->drawEllipse(QRect(option.rect.left() + 4, option.rect.center().y() - d / 2, d, d));
 	}
 
 	int x = option.rect.right() - 4;
@@ -316,6 +355,15 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 		painter->setFont(option.font);
 		painter->drawText(QRect(x - 14, option.rect.top(), 14, option.rect.height()), Qt::AlignCenter,
 				  QString::fromUtf8("\xE2\x98\x85"));
+		x -= favW;
+	}
+	if (countW > 0) {
+		QColor muted = pal.text().color();
+		muted.setAlphaF(0.5);
+		painter->setPen(muted);
+		painter->setFont(option.font);
+		painter->drawText(QRect(x - countW, option.rect.top(), countW - 4, option.rect.height()),
+				  Qt::AlignVCenter | Qt::AlignRight, countText);
 	}
 	painter->restore();
 }
@@ -347,6 +395,7 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	auto *settings = new QMenu(menuButton);
 	QAction *newStackAct = settings->addAction(T("Action.NewStack"));
 	QAction *newSepAct = settings->addAction(T("Action.NewSeparator"));
+	QAction *newSpacerAct = settings->addAction(T("Action.NewSpacer"));
 	QAction *addSceneAct = settings->addAction(T("Action.AddScene"));
 	settings->addSeparator();
 	QAction *expandAct = settings->addAction(T("Action.ExpandAll"));
@@ -354,6 +403,11 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	settings->addSeparator();
 	QAction *exportAct = settings->addAction(T("Action.Export"));
 	QAction *importAct = settings->addAction(T("Action.Import"));
+	QAction *restoreAct = settings->addAction(T("Action.RestoreBackup"));
+	settings->addSeparator();
+	QAction *showMissingAct = settings->addAction(T("Setting.ShowMissing"));
+	showMissingAct->setCheckable(true);
+	QAction *cleanupAct = settings->addAction(T("Action.CleanupMissing"));
 	settings->addSeparator();
 	QMenu *display = settings->addMenu(T("Display.Mode"));
 	QAction *organizedAct = display->addAction(T("Display.Organized"));
@@ -363,6 +417,24 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	auto *modeGroup = new QActionGroup(display);
 	modeGroup->addAction(organizedAct);
 	modeGroup->addAction(compactAct);
+	display->addSeparator();
+	QMenu *colorMenu = display->addMenu(T("Display.ColorMode"));
+	auto *colorGroup = new QActionGroup(colorMenu);
+	QList<QAction *> colorActs;
+	for (const char *key :
+	     {"Display.Color.StripTint", "Display.Color.Strip", "Display.Color.Tint", "Display.Color.Dot"}) {
+		QAction *a = colorMenu->addAction(T(key));
+		a->setCheckable(true);
+		colorGroup->addAction(a);
+		colorActs.append(a);
+	}
+	display->addSeparator();
+	QAction *iconsAct = display->addAction(T("Display.ShowIcons"));
+	QAction *badgesAct = display->addAction(T("Display.ShowBadges"));
+	QAction *countsAct = display->addAction(T("Display.ShowCounts"));
+	QAction *revealAct = display->addAction(T("Display.RevealProgram"));
+	for (QAction *a : {iconsAct, badgesAct, countsAct, revealAct})
+		a->setCheckable(true);
 	QAction *safeAct = settings->addAction(T("Setting.SafeClick"));
 	safeAct->setCheckable(true);
 	QAction *hideNativeAct = settings->addAction(T("Setting.HideNative"));
@@ -380,6 +452,14 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	if (cfg) {
 		config_set_default_bool(cfg, kConfigSection, "Compact", false);
 		compact = config_get_bool(cfg, kConfigSection, "Compact");
+		config_set_default_int(cfg, kConfigSection, "ColorMode", 0);
+		config_set_default_bool(cfg, kConfigSection, "ShowIcons", true);
+		config_set_default_bool(cfg, kConfigSection, "ShowBadges", true);
+		config_set_default_bool(cfg, kConfigSection, "ShowCounts", false);
+		config_set_default_bool(cfg, kConfigSection, "RevealProgram", false);
+		config_set_default_bool(cfg, kConfigSection, "ShowMissing", false);
+		showMissing = config_get_bool(cfg, kConfigSection, "ShowMissing");
+		revealProgram = config_get_bool(cfg, kConfigSection, "RevealProgram");
 	}
 	(compact ? compactAct : organizedAct)->setChecked(true);
 	safeAct->setChecked(safeClick);
@@ -395,6 +475,31 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 		applyDisplayMode();
 	});
 	connect(newSepAct, &QAction::triggered, this, [this] { newSeparator(); });
+	connect(newSpacerAct, &QAction::triggered, this, [this] { newSpacer(); });
+	connect(restoreAct, &QAction::triggered, this, [this] { restoreBackup(); });
+	connect(cleanupAct, &QAction::triggered, this, [this] { cleanupMissing(true); });
+	showMissingAct->setChecked(showMissing);
+	connect(showMissingAct, &QAction::toggled, this, [this](bool on) {
+		showMissing = on;
+		if (config_t *c = userConfig())
+			config_set_bool(c, kConfigSection, "ShowMissing", on);
+		applyFilter();
+	});
+	connect(settings, &QMenu::aboutToShow, this, [this, cleanupAct] {
+		QList<QTreeWidgetItem *> all;
+		collectScenes(nullptr, all);
+		int n = 0;
+		for (QTreeWidgetItem *it : all)
+			n += it->data(0, MissingRole).toBool() ? 1 : 0;
+		cleanupAct->setText(T("Action.CleanupMissing") + QStringLiteral(" (%1)").arg(n));
+		cleanupAct->setEnabled(n > 0 && loaded && !readOnly);
+	});
+	revealAct->setChecked(revealProgram);
+	connect(revealAct, &QAction::toggled, this, [this](bool on) {
+		revealProgram = on;
+		if (config_t *c = userConfig())
+			config_set_bool(c, kConfigSection, "RevealProgram", on);
+	});
 	connect(addSceneAct, &QAction::triggered, this, [this] { addScene(); });
 	connect(expandAct, &QAction::triggered, this, [this] {
 		tree->expandAll();
@@ -438,8 +543,14 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	connect(tree, &QTreeWidget::itemDoubleClicked, this, &StacksDock::onItemDoubleClicked);
 	connect(tree, &QWidget::customContextMenuRequested, this, &StacksDock::onContextMenu);
 	connect(tree, &StacksTree::structureChanged, this, &StacksDock::onStructureChanged);
-	connect(tree, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem *) { markDirty(false); });
-	connect(tree, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem *) { markDirty(false); });
+	connect(tree, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem *) {
+		updateIndicators();
+		markDirty(false);
+	});
+	connect(tree, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem *) {
+		updateIndicators();
+		markDirty(false);
+	});
 	connect(search, &QLineEdit::textChanged, this, &StacksDock::applyFilter);
 	connect(favoritesButton, &QToolButton::toggled, this, &StacksDock::applyFilter);
 
@@ -472,6 +583,80 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	}
 
 	instance = this;
+	if (config_t *c = userConfig()) {
+		delegate->colorMode = std::clamp((int)config_get_int(c, kConfigSection, "ColorMode"), 0, 3);
+		delegate->showIcons = config_get_bool(c, kConfigSection, "ShowIcons");
+		delegate->showBadges = config_get_bool(c, kConfigSection, "ShowBadges");
+		delegate->showCounts = config_get_bool(c, kConfigSection, "ShowCounts");
+	}
+	colorActs[delegate->colorMode]->setChecked(true);
+	for (int i = 0; i < colorActs.size(); i++) {
+		connect(colorActs[i], &QAction::triggered, this, [this, i] {
+			delegate->colorMode = i;
+			if (config_t *c = userConfig())
+				config_set_int(c, kConfigSection, "ColorMode", i);
+			tree->viewport()->update();
+		});
+	}
+	struct Toggle {
+		QAction *action;
+		bool *flag;
+		const char *key;
+	};
+	for (const Toggle &t : {Toggle{iconsAct, &delegate->showIcons, "ShowIcons"},
+				Toggle{badgesAct, &delegate->showBadges, "ShowBadges"},
+				Toggle{countsAct, &delegate->showCounts, "ShowCounts"}}) {
+		t.action->setChecked(*t.flag);
+		bool *flag = t.flag;
+		const char *key = t.key;
+		connect(t.action, &QAction::toggled, this, [this, flag, key](bool on) {
+			*flag = on;
+			if (config_t *c = userConfig())
+				config_set_bool(c, kConfigSection, key, on);
+			tree->doItemsLayout();
+			tree->viewport()->update();
+		});
+	}
+
+	/* Inline rename. */
+	connect(tree, &QTreeWidget::itemChanged, this, &StacksDock::onItemEdited);
+	connect(delegate, &QAbstractItemDelegate::closeEditor, this, [this] {
+		QTimer::singleShot(0, this, [this] {
+			if (editingItem) {
+				QTreeWidgetItem *it = editingItem;
+				editingItem = nullptr;
+				it->setFlags(it->flags() & ~Qt::ItemIsEditable);
+			}
+		});
+	});
+
+	/* Keyboard: search, move. */
+	auto *findKey = new QShortcut(QKeySequence::Find, this, nullptr, nullptr, Qt::WidgetWithChildrenShortcut);
+	connect(findKey, &QShortcut::activated, this, [this] {
+		search->setFocus();
+		search->selectAll();
+	});
+	auto *slashKey = new QShortcut(QKeySequence(Qt::Key_Slash), tree, nullptr, nullptr, Qt::WidgetShortcut);
+	connect(slashKey, &QShortcut::activated, this, [this] {
+		search->setFocus();
+		search->selectAll();
+	});
+	auto *upKey = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Up), tree, nullptr, nullptr, Qt::WidgetShortcut);
+	connect(upKey, &QShortcut::activated, this, [this] { moveItemBy(-1); });
+	auto *downKey = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Down), tree, nullptr, nullptr, Qt::WidgetShortcut);
+	connect(downKey, &QShortcut::activated, this, [this] { moveItemBy(1); });
+	search->installEventFilter(this);
+	connect(search, &QLineEdit::returnPressed, this, [this] { focusFirstMatch(); });
+
+	/* Notice when many missing scenes are kept. */
+	missingBanner = new QLabel(this);
+	missingBanner->setWordWrap(true);
+	missingBanner->setContentsMargins(6, 4, 6, 4);
+	missingBanner->setTextFormat(Qt::RichText);
+	missingBanner->hide();
+	layout->insertWidget(1, missingBanner);
+	connect(missingBanner, &QLabel::linkActivated, this, [this] { cleanupMissing(true); });
+
 	applyDisplayMode();
 
 	saveTimer.setSingleShot(true);
@@ -654,6 +839,8 @@ QJsonObject StacksDock::serializeItem(QTreeWidgetItem *item) const
 		o["name"] = item->text(0);
 		if (item->data(0, FavoriteRole).toBool())
 			o["favorite"] = true;
+		if (item->data(0, MissingSinceRole).isValid())
+			o["missing_since"] = item->data(0, MissingSinceRole).toLongLong();
 		break;
 	case Kind::Stack:
 		o["type"] = "stack";
@@ -664,6 +851,8 @@ QJsonObject StacksDock::serializeItem(QTreeWidgetItem *item) const
 	case Kind::Separator:
 		o["type"] = "separator";
 		o["label"] = item->text(0);
+		if (item->data(0, SeparatorStyleRole).toString() == QLatin1String("spacer"))
+			o["style"] = "spacer";
 		break;
 	case Kind::Unsorted:
 	case Kind::Favorites:
@@ -699,10 +888,14 @@ void StacksDock::buildFromJson(const QJsonArray &nodes, QTreeWidgetItem *parent)
 		if (type == "scene") {
 			item = makeScene(o["uuid"].toString(), o["name"].toString());
 			item->setData(0, FavoriteRole, o["favorite"].toBool());
+			if (o.contains("missing_since"))
+				item->setData(0, MissingSinceRole, o["missing_since"].toVariant().toLongLong());
 		} else if (type == "stack") {
 			item = makeStack(o["name"].toString());
 		} else if (type == "separator") {
 			item = makeSeparator(o["label"].toString());
+			if (o["style"].toString() == QLatin1String("spacer"))
+				item->setData(0, SeparatorStyleRole, QStringLiteral("spacer"));
 		} else {
 			continue; /* Unknown node: skipped in view, kept in lastJson. */
 		}
@@ -728,6 +921,8 @@ void StacksDock::saveTo(obs_data_t *moduleData)
 		root["schema_version"] = kSchemaVersion;
 		root["tree"] = serializeChildren(nullptr);
 		lastJson = QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+		/* Rolling backup: at most one every 5 minutes, 10 kept. */
+		backups::snapshot(backups::currentCollection(), lastJson);
 	}
 	if (lastJson.isEmpty())
 		return; /* Nothing known yet: leave OBS's copy untouched. */
@@ -872,11 +1067,16 @@ void StacksDock::reconcile()
 		if (present) {
 			it->setText(0, scenes[byUuid[uuid]].name);
 			it->setData(0, MissingRole, false);
+			it->setData(0, MissingSinceRole, QVariant());
+			it->setData(0, Qt::ToolTipRole, QVariant());
 		} else if (it->parent() == unsorted) {
 			delete it; /* Unsorted keeps no history. */
 		} else {
 			/* Tombstone: kept hidden so undo restores its place. */
 			it->setData(0, MissingRole, true);
+			if (!it->data(0, MissingSinceRole).isValid())
+				it->setData(0, MissingSinceRole, QDateTime::currentSecsSinceEpoch());
+			it->setData(0, Qt::ToolTipRole, T("Missing.Tooltip"));
 		}
 	}
 
@@ -892,8 +1092,91 @@ void StacksDock::reconcile()
 	}
 
 	moveUnsortedLast();
+	enforceTombstoneCaps();
 	updateIndicators();
 	applyFilter();
+}
+
+void StacksDock::enforceTombstoneCaps()
+{
+	QList<QTreeWidgetItem *> all;
+	collectScenes(nullptr, all);
+	QList<QTreeWidgetItem *> missing;
+	for (QTreeWidgetItem *it : all) {
+		if (it->data(0, MissingRole).toBool())
+			missing.append(it);
+	}
+	if (missing.size() > kTombstoneHardCap && !readOnly) {
+		std::sort(missing.begin(), missing.end(), [](QTreeWidgetItem *a, QTreeWidgetItem *b) {
+			return a->data(0, MissingSinceRole).toLongLong() < b->data(0, MissingSinceRole).toLongLong();
+		});
+		const int excess = static_cast<int>(missing.size()) - kTombstoneHardCap;
+		for (int i = 0; i < excess; i++)
+			delete missing[i];
+		missing = missing.mid(excess);
+		obs_log(LOG_INFO, "trimmed %d oldest missing-scene entries", excess);
+		markDirty(false);
+	}
+	if (missingBanner) {
+		const bool show = missing.size() > kTombstoneSoftCap;
+		if (show)
+			missingBanner->setText(T("Missing.Banner").arg(missing.size()) +
+					       QStringLiteral(" <a href=\"#\">") + T("Action.CleanupMissing") +
+					       QStringLiteral("</a>"));
+		missingBanner->setVisible(show);
+	}
+}
+
+void StacksDock::cleanupMissing(bool ask)
+{
+	if (!loaded || readOnly)
+		return;
+	QList<QTreeWidgetItem *> all;
+	collectScenes(nullptr, all);
+	QList<QTreeWidgetItem *> missing;
+	for (QTreeWidgetItem *it : all) {
+		if (it->data(0, MissingRole).toBool())
+			missing.append(it);
+	}
+	if (missing.isEmpty())
+		return;
+	if (ask &&
+	    QMessageBox::question(this, T("Action.CleanupMissing"), T("Confirm.CleanupMissing").arg(missing.size()),
+				  QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+		return;
+	qDeleteAll(missing);
+	enforceTombstoneCaps();
+	applyFilter();
+	markDirty(); /* undoable */
+}
+
+void StacksDock::restoreBackup()
+{
+	if (!loaded || readOnly)
+		return;
+	const QList<backups::Entry> entries = backups::list(backups::currentCollection());
+	if (entries.isEmpty()) {
+		QMessageBox::information(this, T("Action.RestoreBackup"), T("Backup.None"));
+		return;
+	}
+	QStringList labels;
+	for (const backups::Entry &e : entries)
+		labels << QLocale().toString(e.when, QLocale::LongFormat);
+	bool ok = false;
+	const QString chosen =
+		QInputDialog::getItem(this, T("Action.RestoreBackup"), T("Backup.Choose"), labels, 0, false, &ok);
+	if (!ok)
+		return;
+	const QString json = backups::read(entries[labels.indexOf(chosen)].path);
+	const QJsonObject root = QJsonDocument::fromJson(json.toUtf8()).object();
+	if (!root["tree"].isArray() || root["schema_version"].toInt() > kSchemaVersion) {
+		QMessageBox::warning(this, T("Action.RestoreBackup"), T("Error.ImportInvalid"));
+		return;
+	}
+	tree->clear();
+	buildFromJson(root["tree"].toArray(), nullptr);
+	reconcile();
+	markDirty(); /* undoable */
 }
 
 QTreeWidgetItem *StacksDock::original(QTreeWidgetItem *item) const
@@ -977,11 +1260,42 @@ void StacksDock::updateIndicators()
 				items.append(top->child(j));
 		}
 	}
+	QTreeWidgetItem *programItem = nullptr;
 	for (QTreeWidgetItem *it : items) {
 		const QString uuid = it->data(0, UuidRole).toString();
-		it->setData(0, ProgramRole, !uuid.isEmpty() && uuid == programUuid);
+		const bool isProgram = !uuid.isEmpty() && uuid == programUuid;
+		it->setData(0, ProgramRole, isProgram);
 		it->setData(0, PreviewRole, !uuid.isEmpty() && uuid == previewUuid && uuid != programUuid);
+		if (isProgram && !programItem && !(it->parent() && kindOf(it->parent()) == Kind::Favorites))
+			programItem = it;
 	}
+
+	/* Collapsed stacks carry the badge of the scene they hide. */
+	std::function<std::pair<bool, bool>(QTreeWidgetItem *)> visit = [&](QTreeWidgetItem *it) {
+		bool p = it->data(0, ProgramRole).toBool(), v = it->data(0, PreviewRole).toBool();
+		for (int i = 0; i < it->childCount(); i++) {
+			auto [cp, cv] = visit(it->child(i));
+			p |= cp;
+			v |= cv;
+		}
+		const Kind k = kindOf(it);
+		if (k == Kind::Stack || k == Kind::Unsorted) {
+			it->setData(0, ContainsProgramRole, p && !it->isExpanded());
+			it->setData(0, ContainsPreviewRole, v && !it->isExpanded());
+		}
+		return std::make_pair(p, v);
+	};
+	for (int i = 0; i < tree->topLevelItemCount(); i++) {
+		if (kindOf(tree->topLevelItem(i)) != Kind::Favorites)
+			visit(tree->topLevelItem(i));
+	}
+
+	if (revealProgram && programItem && programItem != lastRevealed) {
+		for (QTreeWidgetItem *p = programItem->parent(); p; p = p->parent())
+			p->setExpanded(true);
+		tree->scrollToItem(programItem);
+	}
+	lastRevealed = programItem;
 }
 
 void StacksDock::applyFilter()
@@ -1002,20 +1316,31 @@ void StacksDock::applyFilter()
 		}
 		if (k == Kind::Scene) {
 			const bool missing = it->data(0, MissingRole).toBool();
-			visible = !missing && (query.isEmpty() || fold(it->text(0)).contains(query)) &&
-				  (!favOnly || it->data(0, FavoriteRole).toBool());
+			if (missing)
+				visible = showMissing && !filtering;
+			else
+				visible = (query.isEmpty() || fold(it->text(0)).contains(query)) &&
+					  (!favOnly || it->data(0, FavoriteRole).toBool());
 		} else if (k == Kind::Separator) {
 			visible = !filtering;
 		} else {
 			bool anyChild = false;
 			for (int i = 0; i < it->childCount(); i++)
 				anyChild |= visit(it->child(i));
+			if (k == Kind::Stack) {
+				QList<QTreeWidgetItem *> inside;
+				collectScenes(it, inside);
+				int n = 0;
+				for (QTreeWidgetItem *c : inside)
+					n += c->data(0, MissingRole).toBool() ? 0 : 1;
+				it->setData(0, CountRole, n);
+			}
 			const bool nameMatch = k == Kind::Stack && !query.isEmpty() && !favOnly &&
 					       fold(it->text(0)).contains(query);
 			if (nameMatch) {
 				for (int i = 0; i < it->childCount(); i++) {
 					QTreeWidgetItem *c = it->child(i);
-					c->setHidden(c->data(0, MissingRole).toBool());
+					c->setHidden(c->data(0, MissingRole).toBool() && !showMissing);
 				}
 			}
 			visible = anyChild || nameMatch || (k == Kind::Stack && !filtering);
@@ -1079,18 +1404,35 @@ void StacksDock::activate(QTreeWidgetItem *item, bool doubleClick)
 
 	if (obs_frontend_preview_program_mode_active()) {
 		obs_frontend_set_current_preview_scene(src);
-		if (doubleClick) {
-			obs_source_t *transition = obs_frontend_get_current_transition();
-			const bool running = transition && obs_transition_get_time(transition) < 1.0f &&
-					     obs_transition_get_time(transition) > 0.0f;
-			obs_source_release(transition);
-			if (!running)
-				obs_frontend_preview_program_trigger_transition();
-		}
+		if (doubleClick && !transitionRunning())
+			obs_frontend_preview_program_trigger_transition();
 	} else if (!safeClick || doubleClick) {
 		obs_frontend_set_current_scene(src);
 	}
 	obs_source_release(src);
+}
+
+bool StacksDock::transitionRunning()
+{
+	obs_source_t *transition = obs_frontend_get_current_transition();
+	const float t = transition ? obs_transition_get_time(transition) : 0.0f;
+	obs_source_release(transition);
+	return t > 0.0f && t < 1.0f;
+}
+
+void StacksDock::sendToProgram(QTreeWidgetItem *item)
+{
+	/* Studio Mode: set Preview, then run the transition, like the native button. */
+	if (!item || kindOf(item) != Kind::Scene || item->data(0, MissingRole).toBool())
+		return;
+	if (!obs_frontend_preview_program_mode_active() || transitionRunning())
+		return;
+	obs_source_t *src = sceneByUuid(item->data(0, UuidRole).toString());
+	if (!src)
+		return;
+	obs_frontend_set_current_preview_scene(src);
+	obs_source_release(src);
+	obs_frontend_preview_program_trigger_transition();
 }
 
 void StacksDock::onItemClicked(QTreeWidgetItem *item, int)
@@ -1128,14 +1470,7 @@ void StacksDock::onStructureChanged()
 
 void StacksDock::newStack()
 {
-	bool ok = false;
-	const QString name = QInputDialog::getText(this, T("Action.NewStack"), T("Prompt.StackName"), QLineEdit::Normal,
-						   T("Default.StackName"), &ok)
-				     .trimmed();
-	if (!ok || name.isEmpty())
-		return;
-
-	QTreeWidgetItem *stack = makeStack(name);
+	QTreeWidgetItem *stack = makeStack(T("Default.StackName"));
 	QList<QTreeWidgetItem *> chosen;
 	for (QTreeWidgetItem *it : tree->selectedItems()) {
 		if (kindOf(it) == Kind::Scene || kindOf(it) == Kind::Separator)
@@ -1168,6 +1503,22 @@ void StacksDock::newStack()
 	moveToStack(chosen, stack);
 	moveUnsortedLast();
 	tree->setCurrentItem(stack);
+	applyFilter();
+	markDirty();
+	renameItem(stack); /* name it in place */
+}
+
+void StacksDock::newSpacer()
+{
+	int row = -1;
+	QTreeWidgetItem *parent = insertionParent(&row);
+	QTreeWidgetItem *sep = makeSeparator(QString());
+	sep->setData(0, SeparatorStyleRole, QStringLiteral("spacer"));
+	if (parent)
+		parent->insertChild(row, sep);
+	else
+		tree->insertTopLevelItem(row < 0 ? tree->topLevelItemCount() : row, sep);
+	moveUnsortedLast();
 	applyFilter();
 	markDirty();
 }
@@ -1232,13 +1583,33 @@ void StacksDock::addScene()
 void StacksDock::renameItem(QTreeWidgetItem *item)
 {
 	const Kind k = kindOf(item);
-	if (k == Kind::Unsorted)
+	if (k == Kind::Unsorted || k == Kind::Favorites || item->data(0, MissingRole).toBool())
 		return;
-	bool ok = false;
+	if (k == Kind::Separator && item->data(0, SeparatorStyleRole).toString() == QLatin1String("spacer"))
+		return;
+	/* Edit in place; onItemEdited validates and applies. */
+	item->setFlags(item->flags() | Qt::ItemIsEditable);
+	editingOld = item->text(0);
+	editingItem = item;
+	tree->scrollToItem(item);
+	tree->editItem(item, 0);
+}
+
+void StacksDock::onItemEdited(QTreeWidgetItem *item)
+{
+	if (!item || item != editingItem)
+		return;
+	editingItem = nullptr;
+	item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+	const Kind k = kindOf(item);
+	const QString name = item->text(0).trimmed();
 	const QString title = k == Kind::Scene ? T("Action.RenameScene") : T("Action.Rename");
-	const QString name = QInputDialog::getText(this, title, title, QLineEdit::Normal, item->text(0), &ok).trimmed();
-	if (!ok || name == item->text(0))
+	const QSignalBlocker block(tree);
+	if (name == editingOld) {
+		item->setText(0, editingOld);
 		return;
+	}
+	item->setText(0, editingOld); /* applied below once valid */
 
 	if (k == Kind::Scene) {
 		if (name.isEmpty())
@@ -1380,6 +1751,86 @@ void StacksDock::redoDeleteScene(const char *name)
 	if (!onAir)
 		removeSceneAndPrune(src);
 	obs_source_release(src);
+}
+
+void StacksDock::moveItemBy(int delta)
+{
+	QTreeWidgetItem *item = tree->currentItem();
+	if (!item || !loaded || readOnly)
+		return;
+	const Kind k = kindOf(item);
+	if (k == Kind::Unsorted || k == Kind::Favorites)
+		return;
+	QTreeWidgetItem *parent = item->parent();
+	if (parent && (kindOf(parent) == Kind::Unsorted || kindOf(parent) == Kind::Favorites))
+		return;
+	const int count = parent ? parent->childCount() : tree->topLevelItemCount();
+	const int row = parent ? parent->indexOfChild(item) : tree->indexOfTopLevelItem(item);
+	int target = row + delta;
+	if (!parent) {
+		/* Stay between the Favorites section and Unsorted. */
+		const int first = (count > 0 && kindOf(tree->topLevelItem(0)) == Kind::Favorites) ? 1 : 0;
+		const int last = (count > 0 && kindOf(tree->topLevelItem(count - 1)) == Kind::Unsorted) ? count - 2
+													: count - 1;
+		if (target < first || target > last)
+			return;
+	} else if (target < 0 || target >= count) {
+		return;
+	}
+	const bool expanded = item->isExpanded();
+	if (parent) {
+		parent->takeChild(row);
+		parent->insertChild(target, item);
+	} else {
+		tree->takeTopLevelItem(row);
+		tree->insertTopLevelItem(target, item);
+	}
+	item->setExpanded(expanded);
+	tree->setCurrentItem(item);
+	applyFilter();
+	markDirty();
+}
+
+void StacksDock::focusFirstMatch()
+{
+	std::function<QTreeWidgetItem *(QTreeWidgetItem *)> find = [&](QTreeWidgetItem *it) -> QTreeWidgetItem * {
+		if (it->isHidden())
+			return nullptr;
+		if (kindOf(it) == Kind::Scene && !it->data(0, MissingRole).toBool() &&
+		    !(it->parent() && kindOf(it->parent()) == Kind::Favorites))
+			return it;
+		for (int i = 0; i < it->childCount(); i++) {
+			if (QTreeWidgetItem *f = find(it->child(i)))
+				return f;
+		}
+		return nullptr;
+	};
+	for (int i = 0; i < tree->topLevelItemCount(); i++) {
+		if (QTreeWidgetItem *f = find(tree->topLevelItem(i))) {
+			/* Select only: activation stays an explicit click. */
+			tree->setCurrentItem(f);
+			tree->scrollToItem(f);
+			tree->setFocus();
+			return;
+		}
+	}
+}
+
+bool StacksDock::eventFilter(QObject *watched, QEvent *event)
+{
+	if (watched == search && event->type() == QEvent::KeyPress) {
+		auto *key = static_cast<QKeyEvent *>(event);
+		if (key->key() == Qt::Key_Down) {
+			focusFirstMatch();
+			return true;
+		}
+		if (key->key() == Qt::Key_Escape) {
+			search->clear();
+			tree->setFocus();
+			return true;
+		}
+	}
+	return QWidget::eventFilter(watched, event);
 }
 
 void StacksDock::dissolveStack(QTreeWidgetItem *stack)
@@ -1551,6 +2002,32 @@ void StacksDock::onContextMenu(const QPoint &pos)
 
 	QMenu menu(this);
 
+	if (item && k == Kind::Scene && item->data(0, MissingRole).toBool()) {
+		/* A missing scene only keeps its place for undo; it can be forgotten. */
+		menu.addAction(T("Action.ForgetMissing"), this, [this, selection] {
+			for (QTreeWidgetItem *it : selection) {
+				if (it->data(0, MissingRole).toBool())
+					delete it;
+			}
+			enforceTombstoneCaps();
+			applyFilter();
+			markDirty();
+		});
+		menu.addAction(T("Action.CleanupMissing"), this, [this] { cleanupMissing(true); });
+		busy++;
+		menu.exec(tree->viewport()->mapToGlobal(pos));
+		busy--;
+		if (busy == 0 && pendingReconcile)
+			reconcile();
+		return;
+	}
+
+	if (item && k == Kind::Scene && obs_frontend_preview_program_mode_active()) {
+		QAction *send = menu.addAction(T("Action.SendToProgram"), this, [this, item] { sendToProgram(item); });
+		send->setEnabled(!transitionRunning());
+		menu.addSeparator();
+	}
+
 	if (item && k == Kind::Scene) {
 		menu.addAction(T("Action.RenameScene"), this, [this, item] { renameItem(item); });
 		const bool fav = item->data(0, FavoriteRole).toBool();
@@ -1610,6 +2087,15 @@ void StacksDock::onContextMenu(const QPoint &pos)
 	menu.addAction(T("Action.AddScene"), this, [this] { addScene(); });
 	menu.addAction(T("Action.NewStack"), this, [this] { newStack(); });
 	menu.addAction(T("Action.NewSeparator"), this, [this] { newSeparator(); });
+	menu.addAction(T("Action.NewSpacer"), this, [this] { newSpacer(); });
+
+	if (item && k == Kind::Scene) {
+		if (obs_source_t *src = sceneByUuid(item->data(0, UuidRole).toString())) {
+			menu.addSeparator();
+			stacks::actions::appendSceneActions(&menu, src, this);
+			obs_source_release(src);
+		}
+	}
 
 	if (item && k == Kind::Scene) {
 		menu.addSeparator();

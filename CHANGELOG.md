@@ -13,6 +13,13 @@ First working preview (unsigned).
 - Design review applied: dock title "Scenes", PGM badge instead of LIVE, search and options below the list.
 
 ### Added
+- PGM / PVW badge on collapsed stacks and optional reveal of the Program scene.
+- "Send to Program" in Studio Mode.
+- Missing scenes: optional display, clean up, soft and hard caps.
+- Rolling backups and restore.
+- Native scene actions: duplicate, filters, projector, screenshot, multiview, transition override.
+- Inline rename, search and move shortcuts.
+- Spacer separators, color display modes, icon / badge / count visibility options.
 - Pinned "Favorites" section mirroring favorite scenes.
 - First-run placement of the dock and Hide / Keep both / Not now dialog.
 - No close button on the Stacks dock, kept when OBS locks or unlocks docks.

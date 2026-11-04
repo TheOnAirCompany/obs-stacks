@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QAction>
 #include <QJsonArray>
+#include <QLabel>
 #include <QJsonObject>
 #include <QLineEdit>
 #include <QPointer>
@@ -45,6 +46,11 @@ enum Role : int {
 	ProgramRole,
 	PreviewRole,
 	IconRole,
+	MissingSinceRole,
+	SeparatorStyleRole,
+	CountRole,
+	ContainsProgramRole,
+	ContainsPreviewRole,
 };
 
 class StacksTree : public QTreeWidget {
@@ -73,6 +79,10 @@ public:
 	QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
 	bool compact = false;
+	int colorMode = 0; /* 0 strip + tint, 1 strip, 2 tint, 3 dot */
+	bool showIcons = true;
+	bool showBadges = true;
+	bool showCounts = false;
 };
 
 class StacksDock : public QWidget {
@@ -142,6 +152,23 @@ private:
 	void exportJson();
 	void importJson();
 	void applyDisplayMode();
+	void newSpacer();
+	void sendToProgram(QTreeWidgetItem *item);
+	static bool transitionRunning();
+	void cleanupMissing(bool ask);
+	void enforceTombstoneCaps();
+	void onItemEdited(QTreeWidgetItem *item);
+	void moveItemBy(int delta);
+	void focusFirstMatch();
+	void restoreBackup();
+	bool eventFilter(QObject *watched, QEvent *event) override;
+
+	QTreeWidgetItem *editingItem = nullptr;
+	QTreeWidgetItem *lastRevealed = nullptr; /* compared only, never dereferenced */
+	QString editingOld;
+	bool showMissing = false;
+	bool revealProgram = false;
+	QLabel *missingBanner = nullptr;
 
 	static StacksDock *instance;
 	StacksDelegate *delegate = nullptr;
