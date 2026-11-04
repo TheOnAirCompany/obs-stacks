@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 First working preview (unsigned).
 
 ### Changed
+- README: badges, English screenshots and per-platform install instructions.
 - "+" button next to the options button for adding scenes, stacks, separators and spacers.
 - The favorite star keeps a fixed slot at the far right; the PGM / PVW badge sits on its left.
 - Destructive confirmations use localized Delete / Cancel buttons, with Cancel as default and Escape button.
