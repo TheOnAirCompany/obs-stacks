@@ -1,3 +1,5 @@
+<div align="center">
+
 # Stacks for OBS
 
 [![Build](https://github.com/TheOnAirCompany/obs-stacks/actions/workflows/push.yaml/badge.svg?branch=main)](https://github.com/TheOnAirCompany/obs-stacks/actions/workflows/push.yaml)
@@ -11,6 +13,8 @@
 **A better way to organize your OBS scenes.**
 
 Stacks for OBS is a native OBS Studio plugin that replaces the flat Scenes list with a scene explorer: collapsible **stacks**, real **separators**, **colors**, **icons**, **favorites** and **search** — without ever creating fake scenes, touching your sources or rewriting your scene collections.
+
+</div>
 
 ![Stacks for OBS in OBS Studio 33](docs/images/overview.png)
 
