@@ -112,7 +112,8 @@ if (( ! (${skips[(Ie)all]} + ${skips[(Ie)deps]}) )) {
       libxinerama-dev \
       libxkbcommon-dev \
       uthash-dev \
-      zlib1g-dev
+      zlib1g-dev \
+      extra-cmake-modules
 
     mkdir -p ${_obs_src:h}
     if [[ ! -d ${_obs_src} ]] {

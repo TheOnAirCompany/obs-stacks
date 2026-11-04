@@ -185,6 +185,7 @@ private:
 	QLineEdit *search = nullptr;
 	QToolButton *favoritesButton = nullptr;
 	QToolButton *menuButton = nullptr;
+	QToolButton *addButton = nullptr;
 	QPointer<QAction> hideNativeAction;
 	QTimer saveTimer;
 

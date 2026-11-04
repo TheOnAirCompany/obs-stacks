@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 First working preview (unsigned).
 
 ### Changed
+- "+" button next to the options button for adding scenes, stacks, separators and spacers.
+- The favorite star keeps a fixed slot at the far right; the PGM / PVW badge sits on its left.
+- Destructive confirmations use localized Delete / Cancel buttons, with Cancel as default and Escape button.
 - Design review applied: dock title "Scenes", PGM badge instead of LIVE, search and options below the list.
 
 ### Added

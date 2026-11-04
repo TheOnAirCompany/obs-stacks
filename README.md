@@ -18,7 +18,7 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 
 ## What works in 0.1.0
 
-- Dock titled "Scenes" with **Program (PGM)** and **Preview (PVW)** badges, search and options at the bottom
+- Dock titled "Scenes" with **Program (PGM)** and **Preview (PVW)** badges, search, options (⋯) and add (+) buttons at the bottom
 - Studio Mode aware click and double-click (click = preview, double-click = transition to Program)
 - Optional **safe click**: a single click never goes live, double-click does
 - Stacks with collapse / expand, nestable up to 4 levels

@@ -102,6 +102,19 @@ QString fold(const QString &s)
 	return out;
 }
 
+/* Destructive confirmation: localized buttons, Cancel is the default and
+ * the Escape button, so a stray Return or Esc never confirms. */
+bool confirm(QWidget *parent, const QString &title, const QString &text, const QString &yesLabel)
+{
+	QMessageBox box(QMessageBox::Question, title, text, QMessageBox::NoButton, parent);
+	QPushButton *yes = box.addButton(yesLabel, QMessageBox::YesRole);
+	QPushButton *cancel = box.addButton(T("Button.Cancel"), QMessageBox::RejectRole);
+	box.setDefaultButton(cancel);
+	box.setEscapeButton(cancel);
+	box.exec();
+	return box.clickedButton() == yes;
+}
+
 config_t *userConfig()
 {
 	return obs_frontend_get_user_config();
@@ -309,7 +322,9 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 
 	/* Leave room for the color mark, the badges, the count and the star. */
 	const int badgeW = (program || preview) ? 42 : 0;
-	const int favW = favorite ? 16 : 0;
+	/* The star keeps a fixed slot at the far right, so neither it nor the
+	 * badge moves when the other appears. */
+	const int favW = 16;
 	QString countText;
 	int countW = 0;
 	if (count >= 0) {
@@ -335,6 +350,13 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 	}
 
 	int x = option.rect.right() - 4;
+	if (favorite) {
+		painter->setPen(QColor("#FFC53D"));
+		painter->setFont(option.font);
+		painter->drawText(QRect(x - 14, option.rect.top(), 14, option.rect.height()), Qt::AlignCenter,
+				  QString::fromUtf8("\xE2\x98\x85"));
+	}
+	x -= favW;
 	if (program || preview) {
 		const QString text = program ? QStringLiteral("PGM") : QStringLiteral("PVW");
 		const QColor bg = program ? QColor("#E5484D") : QColor("#30A46C");
@@ -342,20 +364,13 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 		f.setPointSizeF(f.pointSizeF() * 0.75);
 		f.setBold(true);
 		painter->setFont(f);
-		const QRect badge(x - 38, option.rect.center().y() - 8, 38, 16);
+		const QRect badge(x - 40, option.rect.center().y() - 8, 38, 16);
 		QPainterPath path;
 		path.addRoundedRect(badge, 8, 8);
 		painter->fillPath(path, bg);
 		painter->setPen(Qt::white);
 		painter->drawText(badge, Qt::AlignCenter, text);
 		x -= badgeW;
-	}
-	if (favorite) {
-		painter->setPen(QColor("#FFC53D"));
-		painter->setFont(option.font);
-		painter->drawText(QRect(x - 14, option.rect.top(), 14, option.rect.height()), Qt::AlignCenter,
-				  QString::fromUtf8("\xE2\x98\x85"));
-		x -= favW;
 	}
 	if (countW > 0) {
 		QColor muted = pal.text().color();
@@ -442,6 +457,19 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	hideNativeAction = hideNativeAct;
 	menuButton->setMenu(settings);
 
+	/* "+" opens the add actions; the options menu keeps settings only. */
+	addButton = new QToolButton(this);
+	addButton->setText(QStringLiteral("+"));
+	addButton->setToolTip(T("Menu.Add"));
+	addButton->setPopupMode(QToolButton::InstantPopup);
+	addButton->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; width: 0; }"));
+	auto *addMenu = new QMenu(addButton);
+	for (QAction *a : {addSceneAct, newStackAct, newSepAct, newSpacerAct}) {
+		settings->removeAction(a);
+		addMenu->addAction(a);
+	}
+	addButton->setMenu(addMenu);
+
 	config_t *cfg = userConfig();
 	if (cfg) {
 		config_set_default_bool(cfg, kConfigSection, "SafeClick", false);
@@ -527,9 +555,10 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	header->addWidget(search, 1);
 	header->addWidget(favoritesButton);
 	header->addWidget(menuButton);
+	header->addWidget(addButton);
 	/* Search field and buttons share one height; buttons are square. */
 	for (QWidget *w : {static_cast<QWidget *>(search), static_cast<QWidget *>(favoritesButton),
-			   static_cast<QWidget *>(menuButton)})
+			   static_cast<QWidget *>(menuButton), static_cast<QWidget *>(addButton)})
 		w->setSizePolicy(w == search ? QSizePolicy::Expanding : QSizePolicy::Fixed, QSizePolicy::Expanding);
 
 	tree = new StacksTree(this);
@@ -733,8 +762,7 @@ void StacksDock::importJson()
 		QMessageBox::warning(this, T("Action.Import"), T("Error.ImportInvalid"));
 		return;
 	}
-	if (QMessageBox::question(this, T("Action.Import"), T("Confirm.Import"), QMessageBox::Yes | QMessageBox::Cancel,
-				  QMessageBox::Cancel) != QMessageBox::Yes)
+	if (!confirm(this, T("Action.Import"), T("Confirm.Import"), T("Button.Replace")))
 		return;
 	/* Scenes are matched by UUID, then by name; nothing is created or deleted. */
 	tree->clear();
@@ -1157,9 +1185,8 @@ void StacksDock::cleanupMissing(bool ask)
 	}
 	if (missing.isEmpty())
 		return;
-	if (ask &&
-	    QMessageBox::question(this, T("Action.CleanupMissing"), T("Confirm.CleanupMissing").arg(missing.size()),
-				  QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+	if (ask && !confirm(this, T("Action.CleanupMissing"), T("Confirm.CleanupMissing").arg(missing.size()),
+			    T("Button.Forget")))
 		return;
 	qDeleteAll(missing);
 	enforceTombstoneCaps();
@@ -1677,8 +1704,7 @@ void StacksDock::deleteScene(QTreeWidgetItem *item)
 	}
 
 	const QString text = T("Confirm.DeleteScene").arg(item->text(0));
-	if (QMessageBox::question(this, T("Action.DeleteScene"), text, QMessageBox::Yes | QMessageBox::Cancel,
-				  QMessageBox::Cancel) != QMessageBox::Yes) {
+	if (!confirm(this, T("Action.DeleteScene"), text, T("Button.Delete"))) {
 		obs_source_release(src);
 		return;
 	}
@@ -1846,9 +1872,10 @@ void StacksDock::resizeEvent(QResizeEvent *event)
 {
 	QWidget::resizeEvent(event);
 	const int h = search->height();
-	if (h > 0 && (favoritesButton->width() != h || menuButton->width() != h)) {
+	if (h > 0 && (favoritesButton->width() != h || menuButton->width() != h || addButton->width() != h)) {
 		favoritesButton->setFixedWidth(h);
 		menuButton->setFixedWidth(h);
+		addButton->setFixedWidth(h);
 	}
 }
 

@@ -35,6 +35,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QUuid>
 
 #include <obs-module.h>
+#include <util/config-file.h>
 #include <plugin-support.h>
 
 #include <functional>
@@ -135,7 +136,13 @@ void StacksDock::runSelfTest()
 	connect(r->autoAccept, &QTimer::timeout, this, [] {
 		QWidget *w = QApplication::activeModalWidget();
 		if (auto *box = qobject_cast<QMessageBox *>(w)) {
-			QAbstractButton *b = box->button(QMessageBox::Yes);
+			QAbstractButton *b = nullptr;
+			for (QAbstractButton *candidate : box->buttons()) {
+				if (box->buttonRole(candidate) == QMessageBox::YesRole)
+					b = candidate;
+			}
+			if (!b)
+				b = box->button(QMessageBox::Yes);
 			if (!b)
 				b = box->button(QMessageBox::Ok);
 			if (!b)
@@ -371,6 +378,95 @@ void StacksDock::runSelfTest()
 				 findAction(&menu, txt("SceneAction.Projector.Windowed")),
 			 "filters-screenshot-projector-present");
 		obs_source_release(cam);
+	});
+
+	/* 4. Backups: 5-minute throttle and 10 kept. */
+	step(200, [r] {
+		const QString col = backups::currentCollection();
+		const qsizetype n0 = backups::list(col).size();
+		backups::snapshot(col, QStringLiteral("{\"schema_version\":1,\"tree\":[],\"probe\":0}"), false);
+		r->check(backups::list(col).size() == n0, "backup-throttled-within-5-min");
+	});
+	for (int i = 0; i < 12; i++) {
+		step(1100, [i] {
+			backups::snapshot(backups::currentCollection(),
+					  QStringLiteral("{\"schema_version\":1,\"tree\":[],\"probe\":%1}").arg(i + 1),
+					  true);
+		});
+	}
+	step(200, [r] {
+		const qsizetype n = backups::list(backups::currentCollection()).size();
+		r->check(n == 10, "backup-keeps-newest-10", QString::number(n));
+	});
+
+	/* 5. Filters, screenshot and projector really open. */
+	auto topLevelCount = [] {
+		int n = 0;
+		for (QWidget *w : QApplication::topLevelWidgets())
+			n += w->isVisible() ? 1 : 0;
+		return n;
+	};
+	auto shared = std::make_shared<int>(0);
+	step(300, [this, shared, topLevelCount] {
+		*shared = topLevelCount();
+		obs_source_t *cam = obs_get_source_by_name("Cam 2");
+		QMenu menu;
+		actions::appendSceneActions(&menu, cam, this);
+		if (QAction *a = findAction(&menu, txt("SceneAction.Filters")))
+			a->trigger();
+		if (QAction *a = findAction(&menu, txt("SceneAction.Projector.Windowed")))
+			a->trigger();
+		if (QAction *a = findAction(&menu, txt("SceneAction.Screenshot")))
+			a->trigger();
+		obs_source_release(cam);
+	});
+	step(1200, [r, shared, topLevelCount] {
+		const int now = topLevelCount();
+		QStringList opened;
+		for (QWidget *w : QApplication::topLevelWidgets()) {
+			const QString cls = QString::fromLatin1(w->metaObject()->className());
+			if (w->isVisible() && (cls.contains("Filters") || cls.contains("Projector"))) {
+				opened << cls;
+				w->close();
+			}
+		}
+		r->check(now >= *shared + 2 && opened.size() >= 2, "filters-and-projector-open", opened.join(","));
+		obs_log(LOG_INFO, "[selftest] screenshot requested (see 'Saved screenshot to' in this log)");
+	});
+
+	/* 2 and 10 through the real menus: context menu and the options menu. */
+	step(300, [this, r] {
+		obs_frontend_set_preview_program_mode(true);
+		setProgram("Cam 1");
+	});
+	step(800, [this, r] {
+		QTreeWidgetItem *it = findItem(tree, "BRB", Kind::Scene);
+		tree->scrollToItem(it);
+		const QPoint pos = tree->visualItemRect(it).center();
+		QTimer::singleShot(400, this, [] {
+			if (auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget())) {
+				if (QAction *a = findAction(menu, txt("Action.SendToProgram")))
+					a->trigger();
+				menu->close();
+			}
+		});
+		onContextMenu(pos); /* the real context menu, answered by the timer */
+	});
+	step(1500, [r] {
+		r->check(programName() == "BRB", "context-menu-send-to-program", programName());
+		obs_frontend_set_preview_program_mode(false);
+	});
+	step(500, [this, r] {
+		QMenu *options = menuButton->menu();
+		QAction *dot = options ? findAction(options, txt("Display.Color.Dot")) : nullptr;
+		if (dot)
+			dot->trigger();
+		config_t *cfg = obs_frontend_get_user_config();
+		r->check(dot && delegate->colorMode == 3 && config_get_int(cfg, "obs-stacks", "ColorMode") == 3,
+			 "options-menu-color-mode");
+		if (QAction *back = options ? findAction(options, txt("Display.Color.StripTint")) : nullptr)
+			back->trigger();
+		r->check(delegate->colorMode == 0, "options-menu-color-mode-back");
 	});
 
 	/* 9. Spacer. */
