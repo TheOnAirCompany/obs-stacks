@@ -21,7 +21,11 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 - Dock with **Program (LIVE)** and **Preview (PVW)** badges
 - Studio Mode aware click and double-click (click = preview, double-click = transition to Program)
 - Optional **safe click**: a single click never goes live, double-click does
-- Stacks, one level deep, with collapse / expand
+- Stacks with collapse / expand, nestable up to 4 levels
+- Lucide icons on scenes and stacks, with a searchable picker (1,544 icons, tinted with the item color)
+- Undo / redo of every organization change with OBS Edit > Undo
+- Export and import of the organization as JSON (scenes matched by UUID, then name; import is undoable)
+- Organized and Compact display modes
 - Separators: plain line or labeled
 - 8-color palette plus a custom color, shown as a strip and as a stack tint
 - Favorites and a favorites-only filter
@@ -39,11 +43,6 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 
 ## Not yet
 
-- Icons
-- Compact and Organized display modes
-- Undo for organization changes
-- JSON export / import
-- Nested stacks
 - Undo for scenes deleted from Stacks (use the native dock for undoable deletes)
 - Final design values (colors, sizes and spacing are still proposals)
 
@@ -126,5 +125,7 @@ The first configure downloads the OBS 33.0.1 sources and prebuilt dependencies i
 ## License
 
 [GPL-2.0-or-later](LICENSE), like OBS Studio.
+
+Icons: Lucide (ISC), https://lucide.dev
 
 © 2026 The OnAir Company

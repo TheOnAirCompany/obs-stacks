@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "stacks-dock.hpp"
+#include "icon-library.hpp"
 
 #include <QAction>
 #include <QColorDialog>
@@ -33,6 +34,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QActionGroup>
+#include <QFile>
+#include <QFileDialog>
 #include <QSet>
 #include <QShortcut>
 #include <QVBoxLayout>
@@ -52,6 +56,7 @@ namespace {
 constexpr const char *kModuleKey = "obs-stacks";
 constexpr const char *kConfigSection = "obs-stacks";
 constexpr int kSchemaVersion = 1;
+constexpr int kMaxDepth = 4;
 
 QString T(const char *key)
 {
@@ -149,8 +154,17 @@ bool StacksTree::dropAllowed(QDropEvent *event) const
 		const Kind k = kindOf(item);
 		if (k == Kind::Unsorted)
 			return false;
-		if (k == Kind::Stack && newParent)
-			return false; /* Stacks are one level deep in this version. */
+		if (k == Kind::Stack) {
+			/* A stack cannot go inside itself, and nesting stays shallow. */
+			int depth = 0;
+			for (QTreeWidgetItem *p = newParent; p; p = p->parent()) {
+				if (p == item)
+					return false;
+				depth++;
+			}
+			if (depth >= kMaxDepth)
+				return false;
+		}
 	}
 	return true;
 }
@@ -181,9 +195,10 @@ QSize StacksDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelI
 	QSize s = QStyledItemDelegate::sizeHint(option, index);
 	const Kind k = static_cast<Kind>(index.data(KindRole).toInt());
 	if (k == Kind::Separator)
-		s.setHeight(index.data(Qt::DisplayRole).toString().isEmpty() ? 10 : 20);
+		s.setHeight(index.data(Qt::DisplayRole).toString().isEmpty() ? (compact ? 6 : 10)
+									     : (compact ? 16 : 20));
 	else
-		s.setHeight(std::max(s.height(), 26));
+		s.setHeight(compact ? 20 : std::max(s.height(), 26));
 	return s;
 }
 
@@ -227,6 +242,17 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 
 	QStyleOptionViewItem opt(option);
 	initStyleOption(&opt, index);
+
+	const QString iconName = index.data(IconRole).toString();
+	if (!iconName.isEmpty()) {
+		const QColor tint = color.isValid() ? color : pal.text().color();
+		const int px = compact ? 14 : 16;
+		opt.icon = stacks::icons::icon(iconName, tint, px);
+		if (!opt.icon.isNull()) {
+			opt.features |= QStyleOptionViewItem::HasDecoration;
+			opt.decorationSize = QSize(px, px);
+		}
+	}
 
 	const bool program = index.data(ProgramRole).toBool();
 	const bool preview = index.data(PreviewRole).toBool();
@@ -321,6 +347,17 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	QAction *expandAct = settings->addAction(T("Action.ExpandAll"));
 	QAction *collapseAct = settings->addAction(T("Action.CollapseAll"));
 	settings->addSeparator();
+	QAction *exportAct = settings->addAction(T("Action.Export"));
+	QAction *importAct = settings->addAction(T("Action.Import"));
+	settings->addSeparator();
+	QMenu *display = settings->addMenu(T("Display.Mode"));
+	QAction *organizedAct = display->addAction(T("Display.Organized"));
+	QAction *compactAct = display->addAction(T("Display.Compact"));
+	organizedAct->setCheckable(true);
+	compactAct->setCheckable(true);
+	auto *modeGroup = new QActionGroup(display);
+	modeGroup->addAction(organizedAct);
+	modeGroup->addAction(compactAct);
 	QAction *safeAct = settings->addAction(T("Setting.SafeClick"));
 	safeAct->setCheckable(true);
 	QAction *hideNativeAct = settings->addAction(T("Setting.HideNative"));
@@ -335,19 +372,32 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 		safeClick = config_get_bool(cfg, kConfigSection, "SafeClick");
 		hideNative = config_get_bool(cfg, kConfigSection, "HideNativeScenes");
 	}
+	if (cfg) {
+		config_set_default_bool(cfg, kConfigSection, "Compact", false);
+		compact = config_get_bool(cfg, kConfigSection, "Compact");
+	}
+	(compact ? compactAct : organizedAct)->setChecked(true);
 	safeAct->setChecked(safeClick);
 	hideNativeAct->setChecked(hideNative);
 
 	connect(newStackAct, &QAction::triggered, this, [this] { newStack(); });
+	connect(exportAct, &QAction::triggered, this, [this] { exportJson(); });
+	connect(importAct, &QAction::triggered, this, [this] { importJson(); });
+	connect(compactAct, &QAction::toggled, this, [this](bool on) {
+		compact = on;
+		if (config_t *c = userConfig())
+			config_set_bool(c, kConfigSection, "Compact", on);
+		applyDisplayMode();
+	});
 	connect(newSepAct, &QAction::triggered, this, [this] { newSeparator(); });
 	connect(addSceneAct, &QAction::triggered, this, [this] { addScene(); });
 	connect(expandAct, &QAction::triggered, this, [this] {
 		tree->expandAll();
-		markDirty();
+		markDirty(false);
 	});
 	connect(collapseAct, &QAction::triggered, this, [this] {
 		tree->collapseAll();
-		markDirty();
+		markDirty(false);
 	});
 	connect(safeAct, &QAction::toggled, this, [this](bool on) {
 		safeClick = on;
@@ -369,7 +419,8 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	header->addWidget(menuButton);
 
 	tree = new StacksTree(this);
-	tree->setItemDelegate(new StacksDelegate(tree));
+	delegate = new StacksDelegate(tree);
+	tree->setItemDelegate(delegate);
 
 	auto *layout = new QVBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);
@@ -381,8 +432,8 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	connect(tree, &QTreeWidget::itemDoubleClicked, this, &StacksDock::onItemDoubleClicked);
 	connect(tree, &QWidget::customContextMenuRequested, this, &StacksDock::onContextMenu);
 	connect(tree, &StacksTree::structureChanged, this, &StacksDock::onStructureChanged);
-	connect(tree, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem *) { markDirty(); });
-	connect(tree, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem *) { markDirty(); });
+	connect(tree, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem *) { markDirty(false); });
+	connect(tree, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem *) { markDirty(false); });
 	connect(search, &QLineEdit::textChanged, this, &StacksDock::applyFilter);
 	connect(favoritesButton, &QToolButton::toggled, this, &StacksDock::applyFilter);
 
@@ -414,12 +465,75 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 		connect(del, &QShortcut::activated, this, removeItem);
 	}
 
+	instance = this;
+	applyDisplayMode();
+
 	saveTimer.setSingleShot(true);
 	saveTimer.setInterval(1500);
 	connect(&saveTimer, &QTimer::timeout, this, [] { obs_frontend_save(); });
 }
 
-StacksDock::~StacksDock() = default;
+StacksDock::~StacksDock()
+{
+	if (instance == this)
+		instance = nullptr;
+}
+
+void StacksDock::applyDisplayMode()
+{
+	if (!tree || !delegate)
+		return;
+	delegate->compact = compact;
+	tree->setIndentation(compact ? 10 : 14);
+	tree->doItemsLayout();
+	tree->viewport()->update();
+}
+
+void StacksDock::exportJson()
+{
+	const QString path = QFileDialog::getSaveFileName(this, T("Action.Export"), QStringLiteral("stacks.json"),
+							  QStringLiteral("JSON (*.json)"));
+	if (path.isEmpty())
+		return;
+	QFile file(path);
+	if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+		QMessageBox::warning(this, T("Action.Export"), T("Error.File"));
+		return;
+	}
+	const QJsonDocument doc = QJsonDocument::fromJson((loaded && !readOnly ? currentJson() : lastJson).toUtf8());
+	file.write(doc.toJson(QJsonDocument::Indented));
+}
+
+void StacksDock::importJson()
+{
+	if (!loaded || readOnly)
+		return;
+	const QString path =
+		QFileDialog::getOpenFileName(this, T("Action.Import"), QString(), QStringLiteral("JSON (*.json)"));
+	if (path.isEmpty())
+		return;
+	QFile file(path);
+	if (!file.open(QIODevice::ReadOnly) || file.size() > 8 * 1024 * 1024) {
+		QMessageBox::warning(this, T("Action.Import"), T("Error.File"));
+		return;
+	}
+	QJsonParseError err{};
+	const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &err);
+	const QJsonObject root = doc.object();
+	if (err.error != QJsonParseError::NoError || !root["tree"].isArray() ||
+	    root["schema_version"].toInt() > kSchemaVersion) {
+		QMessageBox::warning(this, T("Action.Import"), T("Error.ImportInvalid"));
+		return;
+	}
+	if (QMessageBox::question(this, T("Action.Import"), T("Confirm.Import"), QMessageBox::Yes | QMessageBox::Cancel,
+				  QMessageBox::Cancel) != QMessageBox::Yes)
+		return;
+	/* Scenes are matched by UUID, then by name; nothing is created or deleted. */
+	tree->clear();
+	buildFromJson(root["tree"].toArray(), nullptr);
+	reconcile();
+	markDirty(); /* undoable: Edit > Undo restores the previous organization */
+}
 
 /* ---------------------------- items ------------------------------------- */
 
@@ -550,6 +664,9 @@ QJsonObject StacksDock::serializeItem(QTreeWidgetItem *item) const
 	}
 	if (!color.isEmpty())
 		o["color"] = color;
+	const QString icon = item->data(0, IconRole).toString();
+	if (!icon.isEmpty() && kindOf(item) != Kind::Separator)
+		o["icon"] = icon;
 	return o;
 }
 
@@ -575,7 +692,7 @@ void StacksDock::buildFromJson(const QJsonArray &nodes, QTreeWidgetItem *parent)
 		if (type == "scene") {
 			item = makeScene(o["uuid"].toString(), o["name"].toString());
 			item->setData(0, FavoriteRole, o["favorite"].toBool());
-		} else if (type == "stack" && !parent) {
+		} else if (type == "stack") {
 			item = makeStack(o["name"].toString());
 		} else if (type == "separator") {
 			item = makeSeparator(o["label"].toString());
@@ -584,6 +701,8 @@ void StacksDock::buildFromJson(const QJsonArray &nodes, QTreeWidgetItem *parent)
 		}
 		if (o.contains("color"))
 			item->setData(0, ColorRole, o["color"].toString());
+		if (o.contains("icon"))
+			item->setData(0, IconRole, o["icon"].toString());
 		if (parent)
 			parent->addChild(item);
 		else
@@ -640,10 +759,45 @@ void StacksDock::loadFrom(obs_data_t *moduleData)
 	buildFromJson(root["tree"].toArray(), nullptr);
 }
 
-void StacksDock::markDirty()
+QString StacksDock::currentJson() const
 {
-	if (loaded && !readOnly)
-		saveTimer.start();
+	QJsonObject root;
+	root["schema_version"] = kSchemaVersion;
+	root["tree"] = serializeChildren(nullptr);
+	return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+}
+
+StacksDock *StacksDock::instance = nullptr;
+
+void StacksDock::undoRedoCallback(const char *data)
+{
+	if (instance && data)
+		instance->restoreSnapshot(QString::fromUtf8(data));
+}
+
+void StacksDock::restoreSnapshot(const QString &json)
+{
+	if (!loaded || readOnly)
+		return;
+	const QJsonObject root = QJsonDocument::fromJson(json.toUtf8()).object();
+	tree->clear();
+	buildFromJson(root["tree"].toArray(), nullptr);
+	snapshot = json;
+	reconcile();
+	saveTimer.start();
+}
+
+void StacksDock::markDirty(bool undoable)
+{
+	if (!loaded || readOnly)
+		return;
+	const QString now = currentJson();
+	if (undoable && !snapshot.isEmpty() && now != snapshot) {
+		obs_frontend_add_undo_redo_action(obs_module_text("Undo.Organize"), undoRedoCallback, undoRedoCallback,
+						  snapshot.toUtf8().constData(), now.toUtf8().constData(), false);
+	}
+	snapshot = now;
+	saveTimer.start();
 }
 
 /* ---------------------------- sync -------------------------------------- */
@@ -802,6 +956,7 @@ void StacksDock::handleFrontendEvent(enum obs_frontend_event event)
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
 		loaded = true;
 		reconcile();
+		snapshot = currentJson();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED:
 		reconcile();
@@ -904,16 +1059,28 @@ void StacksDock::newStack()
 			chosen.append(it);
 	}
 
-	/* Insert where the first selected item sits at the top level. */
-	int row = tree->topLevelItemCount();
-	if (!chosen.isEmpty()) {
-		QTreeWidgetItem *top = chosen.first();
-		while (top->parent())
-			top = top->parent();
-		if (kindOf(top) != Kind::Unsorted)
-			row = tree->indexOfTopLevelItem(top);
+	/* Insert where the first selected item sits (inside its stack). */
+	QTreeWidgetItem *cur = chosen.isEmpty() ? tree->currentItem() : chosen.first();
+	QTreeWidgetItem *host = nullptr;
+	int row = -1;
+	if (cur && kindOf(cur) == Kind::Stack && chosen.isEmpty()) {
+		host = cur;
+		row = cur->childCount();
+	} else if (cur && cur->parent() && kindOf(cur->parent()) == Kind::Stack) {
+		host = cur->parent();
+		row = host->indexOfChild(cur);
+	} else if (cur && !cur->parent()) {
+		row = tree->indexOfTopLevelItem(cur);
 	}
-	tree->insertTopLevelItem(row, stack);
+	int depth = 0;
+	for (QTreeWidgetItem *p = host; p; p = p->parent())
+		depth++;
+	if (depth >= kMaxDepth)
+		host = nullptr, row = -1;
+	if (host)
+		host->insertChild(row, stack);
+	else
+		tree->insertTopLevelItem(row < 0 ? tree->topLevelItemCount() : row, stack);
 	stack->setExpanded(true);
 	moveToStack(chosen, stack);
 	moveUnsortedLast();
@@ -1039,12 +1206,17 @@ void StacksDock::deleteScene(QTreeWidgetItem *item)
 
 void StacksDock::dissolveStack(QTreeWidgetItem *stack)
 {
-	const int row = tree->indexOfTopLevelItem(stack);
+	QTreeWidgetItem *parent = stack->parent();
+	const int row = parent ? parent->indexOfChild(stack) : tree->indexOfTopLevelItem(stack);
 	if (row < 0)
 		return;
 	QList<QTreeWidgetItem *> children = stack->takeChildren();
-	for (int i = 0; i < children.size(); i++)
-		tree->insertTopLevelItem(row + 1 + i, children[i]);
+	for (int i = 0; i < children.size(); i++) {
+		if (parent)
+			parent->insertChild(row + 1 + i, children[i]);
+		else
+			tree->insertTopLevelItem(row + 1 + i, children[i]);
+	}
 	delete stack;
 	moveUnsortedLast();
 	applyFilter();
@@ -1066,6 +1238,22 @@ void StacksDock::setColor(const QList<QTreeWidgetItem *> &items, const QString &
 	for (QTreeWidgetItem *it : items) {
 		if (kindOf(it) != Kind::Unsorted)
 			it->setData(0, ColorRole, color);
+	}
+	tree->viewport()->update();
+	markDirty();
+}
+
+void StacksDock::chooseIcon(const QList<QTreeWidgetItem *> &items, QTreeWidgetItem *item)
+{
+	const QColor tint(item->data(0, ColorRole).toString());
+	const QString name = stacks::icons::pick(this, item->data(0, IconRole).toString(),
+						 tint.isValid() ? tint : palette().text().color());
+	if (name.isNull())
+		return; /* cancelled */
+	for (QTreeWidgetItem *it : items) {
+		const Kind k = kindOf(it);
+		if (k == Kind::Scene || k == Kind::Stack)
+			it->setData(0, IconRole, name);
 	}
 	tree->viewport()->update();
 	markDirty();
@@ -1182,12 +1370,18 @@ void StacksDock::onContextMenu(const QPoint &pos)
 			       [this, selection] { toggleFavorite(selection); });
 
 		QMenu *move = menu.addMenu(T("Action.MoveToStack"));
-		for (int i = 0; i < tree->topLevelItemCount(); i++) {
-			QTreeWidgetItem *s = tree->topLevelItem(i);
-			if (kindOf(s) != Kind::Stack)
-				continue;
-			move->addAction(s->text(0), this, [this, selection, s] { moveToStack(selection, s); });
-		}
+		std::function<void(QTreeWidgetItem *, int)> listStacks = [&](QTreeWidgetItem *parent, int level) {
+			const int n = parent ? parent->childCount() : tree->topLevelItemCount();
+			for (int i = 0; i < n; i++) {
+				QTreeWidgetItem *s = parent ? parent->child(i) : tree->topLevelItem(i);
+				if (kindOf(s) != Kind::Stack)
+					continue;
+				const QString label = QString(level * 3, QChar(' ')) + s->text(0);
+				move->addAction(label, this, [this, selection, s] { moveToStack(selection, s); });
+				listStacks(s, level + 1);
+			}
+		};
+		listStacks(nullptr, 0);
 		move->addSeparator();
 		move->addAction(T("Action.MoveToTop"), this, [this, selection] { moveToStack(selection, nullptr); });
 		move->addAction(T("Action.NewStackFromSelection"), this, [this] { newStack(); });
@@ -1210,6 +1404,9 @@ void StacksDock::onContextMenu(const QPoint &pos)
 				setColor(selection, c.name());
 		});
 		colors->addAction(T("Color.None"), this, [this, selection] { setColor(selection, QString()); });
+		if (k != Kind::Separator)
+			menu.addAction(T("Icon.Pick") + QStringLiteral("…"), this,
+				       [this, selection, item] { chooseIcon(selection, item); });
 	}
 
 	if (item && (k == Kind::Stack || k == Kind::Separator)) {

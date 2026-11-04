@@ -44,6 +44,7 @@ enum Role : int {
 	MissingRole,
 	ProgramRole,
 	PreviewRole,
+	IconRole,
 };
 
 class StacksTree : public QTreeWidget {
@@ -70,6 +71,8 @@ public:
 	using QStyledItemDelegate::QStyledItemDelegate;
 	void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 	QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+
+	bool compact = false;
 };
 
 class StacksDock : public QWidget {
@@ -121,11 +124,23 @@ private:
 	void dissolveStack(QTreeWidgetItem *item);
 	void deleteOrgItem(QTreeWidgetItem *item);
 	void setColor(const QList<QTreeWidgetItem *> &items, const QString &color);
+	void chooseIcon(const QList<QTreeWidgetItem *> &items, QTreeWidgetItem *item);
 	void toggleFavorite(const QList<QTreeWidgetItem *> &items);
 	void moveToStack(const QList<QTreeWidgetItem *> &items, QTreeWidgetItem *stack);
 	void setNativeDockHidden(bool hidden);
 	void firstRun();
-	void markDirty();
+	void markDirty(bool undoable = true);
+	QString currentJson() const;
+	void restoreSnapshot(const QString &json);
+	static void undoRedoCallback(const char *data);
+	void exportJson();
+	void importJson();
+	void applyDisplayMode();
+
+	static StacksDock *instance;
+	StacksDelegate *delegate = nullptr;
+	QString snapshot;
+	bool compact = false;
 
 	static obs_source_t *sceneByUuid(const QString &uuid);
 

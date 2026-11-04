@@ -14,7 +14,11 @@ First working preview (unsigned).
 - No close button on the Stacks dock, kept when OBS locks or unlocks docks.
 - Stacks dock with Program (LIVE) and Preview (PVW) badges.
 - Studio Mode aware click and double-click, and an optional safe click setting.
-- Stacks (one level deep) with collapse and expand.
+- Stacks with collapse and expand, nestable up to 4 levels.
+- Lucide icons (ISC) with a searchable picker.
+- Undo / redo of organization changes through OBS Edit > Undo.
+- JSON export and import of the organization.
+- Organized and Compact display modes.
 - Separators, as a line or with a label.
 - 8-color palette and custom color, shown as a strip and as a stack tint.
 - Favorites and a favorites-only filter.
