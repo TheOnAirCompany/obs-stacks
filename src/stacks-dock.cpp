@@ -527,6 +527,10 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	header->addWidget(search, 1);
 	header->addWidget(favoritesButton);
 	header->addWidget(menuButton);
+	/* Search field and buttons share one height; buttons are square. */
+	for (QWidget *w : {static_cast<QWidget *>(search), static_cast<QWidget *>(favoritesButton),
+			   static_cast<QWidget *>(menuButton)})
+		w->setSizePolicy(w == search ? QSizePolicy::Expanding : QSizePolicy::Fixed, QSizePolicy::Expanding);
 
 	tree = new StacksTree(this);
 	delegate = new StacksDelegate(tree);
@@ -649,6 +653,16 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	auto *downKey = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Down), tree, nullptr, nullptr, Qt::WidgetShortcut);
 	connect(downKey, &QShortcut::activated, this, [this] { moveItemBy(1); });
 	search->installEventFilter(this);
+	auto *escKey = new QShortcut(QKeySequence(Qt::Key_Escape), tree, nullptr, nullptr, Qt::WidgetShortcut);
+	connect(escKey, &QShortcut::activated, this, [this] {
+		if (!search->text().isEmpty() || favoritesButton->isChecked()) {
+			QTreeWidgetItem *keep = original(tree->currentItem());
+			search->clear();
+			favoritesButton->setChecked(false);
+			if (keep)
+				tree->scrollToItem(keep);
+		}
+	});
 	connect(search, &QLineEdit::returnPressed, this, [this] { focusFirstMatch(); });
 
 	/* Notice when many missing scenes are kept. */
@@ -1363,6 +1377,10 @@ void StacksDock::handleFrontendEvent(enum obs_frontend_event event)
 	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
 		setNativeDockHidden(hideNative);
 		QTimer::singleShot(0, this, [this] { firstRun(); });
+#ifdef STACKS_SELFTEST
+		if (qEnvironmentVariableIsSet("STACKS_SELFTEST"))
+			QTimer::singleShot(3000, this, [this] { runSelfTest(); });
+#endif
 		[[fallthrough]];
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
 		loaded = true;
@@ -1821,6 +1839,16 @@ void StacksDock::focusFirstMatch()
 			tree->setFocus();
 			return;
 		}
+	}
+}
+
+void StacksDock::resizeEvent(QResizeEvent *event)
+{
+	QWidget::resizeEvent(event);
+	const int h = search->height();
+	if (h > 0 && (favoritesButton->width() != h || menuButton->width() != h)) {
+		favoritesButton->setFixedWidth(h);
+		menuButton->setFixedWidth(h);
 	}
 }
 

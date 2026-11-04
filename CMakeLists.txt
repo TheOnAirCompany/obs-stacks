@@ -50,3 +50,9 @@ target_sources(
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
+
+option(STACKS_SELFTEST "Build the in-OBS self-test (development only)" OFF)
+if(STACKS_SELFTEST)
+  target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/stacks-selftest.cpp)
+  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE STACKS_SELFTEST)
+endif()

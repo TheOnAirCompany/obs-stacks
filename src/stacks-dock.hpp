@@ -161,7 +161,11 @@ private:
 	void moveItemBy(int delta);
 	void focusFirstMatch();
 	void restoreBackup();
+#ifdef STACKS_SELFTEST
+	void runSelfTest();
+#endif
 	bool eventFilter(QObject *watched, QEvent *event) override;
+	void resizeEvent(QResizeEvent *event) override;
 
 	QTreeWidgetItem *editingItem = nullptr;
 	QTreeWidgetItem *lastRevealed = nullptr; /* compared only, never dereferenced */

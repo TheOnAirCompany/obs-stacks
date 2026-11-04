@@ -122,6 +122,10 @@ cmake --build --preset ubuntu-x86_64
 
 The first configure downloads the OBS 33.0.1 sources and prebuilt dependencies into `.deps/` and builds `libobs` and `obs-frontend-api` once.
 
+### In-OBS self-test (development)
+
+Configure with `-DSTACKS_SELFTEST=ON` and start OBS with `STACKS_SELFTEST=1` on a disposable scene collection that contains the demo scenes (Countdown, Opening, Cam 1, Cam 2, Plan large, Interview, BRB, Pause, Problème technique, Générique de fin, Test Zoom, in the stacks Ouverture, Plateau, Habillage). The dock then drives its own code against the real frontend API and writes `[selftest] PASS|FAIL <name>` lines to the OBS log. Release builds never contain it.
+
 ### Plugin layout (OBS 33)
 
 | Platform | Binary | Data (incl. `manifest.json`) |
