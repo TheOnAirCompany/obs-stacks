@@ -626,6 +626,9 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 				QTreeWidgetItem *it = editingItem;
 				editingItem = nullptr;
 				it->setFlags(it->flags() & ~Qt::ItemIsEditable);
+				busy--;
+				if (busy == 0 && pendingReconcile)
+					reconcile();
 			}
 		});
 	});
@@ -1590,6 +1593,8 @@ void StacksDock::renameItem(QTreeWidgetItem *item)
 	/* Edit in place; onItemEdited validates and applies. */
 	item->setFlags(item->flags() | Qt::ItemIsEditable);
 	editingOld = item->text(0);
+	if (!editingItem)
+		busy++; /* reconcile waits: it could delete the item being edited */
 	editingItem = item;
 	tree->scrollToItem(item);
 	tree->editItem(item, 0);
@@ -1600,6 +1605,9 @@ void StacksDock::onItemEdited(QTreeWidgetItem *item)
 	if (!item || item != editingItem)
 		return;
 	editingItem = nullptr;
+	busy--;
+	if (busy == 0 && pendingReconcile)
+		QTimer::singleShot(0, this, [this] { reconcile(); });
 	item->setFlags(item->flags() & ~Qt::ItemIsEditable);
 	const Kind k = kindOf(item);
 	const QString name = item->text(0).trimmed();
