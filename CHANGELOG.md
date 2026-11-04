@@ -9,7 +9,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 First working preview (unsigned).
 
+### Changed
+- Design review applied: dock title "Scenes", PGM badge instead of LIVE, search and options below the list.
+
 ### Added
+- Pinned "Favorites" section mirroring favorite scenes.
 - First-run placement of the dock and Hide / Keep both / Not now dialog.
 - No close button on the Stacks dock, kept when OBS locks or unlocks docks.
 - Stacks dock with Program (LIVE) and Preview (PVW) badges.

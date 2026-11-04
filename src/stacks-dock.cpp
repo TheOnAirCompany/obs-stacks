@@ -148,6 +148,8 @@ bool StacksTree::dropAllowed(QDropEvent *event) const
 			newParent = target->parent();
 	}
 
+	if (newParent && kindOf(newParent) == Kind::Favorites)
+		return false; /* The pinned section only mirrors favorites. */
 	if (newParent && kindOf(newParent) == Kind::Unsorted)
 		return false; /* Nothing is filed into Unsorted by hand. */
 	if (newParent && kindOf(newParent) != Kind::Stack)
@@ -260,7 +262,7 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 	const bool program = index.data(ProgramRole).toBool();
 	const bool preview = index.data(PreviewRole).toBool();
 	const bool favorite = index.data(FavoriteRole).toBool();
-	const bool isGroup = (k == Kind::Stack || k == Kind::Unsorted);
+	const bool isGroup = (k == Kind::Stack || k == Kind::Unsorted || k == Kind::Favorites);
 
 	if (isGroup) {
 		opt.font.setBold(true);
@@ -295,7 +297,7 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 
 	int x = option.rect.right() - 4;
 	if (program || preview) {
-		const QString text = program ? QStringLiteral("LIVE") : QStringLiteral("PVW");
+		const QString text = program ? QStringLiteral("PGM") : QStringLiteral("PVW");
 		const QColor bg = program ? QColor("#E5484D") : QColor("#30A46C");
 		QFont f = option.font;
 		f.setPointSizeF(f.pointSizeF() * 0.75);
@@ -415,7 +417,7 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	});
 
 	auto *header = new QHBoxLayout();
-	header->setContentsMargins(4, 4, 4, 2);
+	header->setContentsMargins(4, 2, 4, 4);
 	header->setSpacing(4);
 	header->addWidget(search, 1);
 	header->addWidget(favoritesButton);
@@ -428,8 +430,9 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	auto *layout = new QVBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
-	layout->addLayout(header);
+	/* Search and options sit below the list (design review DR-14). */
 	layout->addWidget(tree, 1);
+	layout->addLayout(header);
 
 	connect(tree, &QTreeWidget::itemClicked, this, &StacksDock::onItemClicked);
 	connect(tree, &QTreeWidget::itemDoubleClicked, this, &StacksDock::onItemDoubleClicked);
@@ -443,8 +446,8 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	/* Keyboard: F2 / Return rename (like OBS on macOS), Delete removes. */
 	auto withItem = [this](auto fn) {
 		return [this, fn] {
-			QTreeWidgetItem *item = tree->currentItem();
-			if (!item)
+			QTreeWidgetItem *item = original(tree->currentItem());
+			if (!item || kindOf(item) == Kind::Favorites)
 				return;
 			busy++;
 			fn(item);
@@ -663,6 +666,7 @@ QJsonObject StacksDock::serializeItem(QTreeWidgetItem *item) const
 		o["label"] = item->text(0);
 		break;
 	case Kind::Unsorted:
+	case Kind::Favorites:
 		break;
 	}
 	if (!color.isEmpty())
@@ -679,8 +683,8 @@ QJsonArray StacksDock::serializeChildren(QTreeWidgetItem *parent) const
 	const int n = parent ? parent->childCount() : tree->topLevelItemCount();
 	for (int i = 0; i < n; i++) {
 		QTreeWidgetItem *it = parent ? parent->child(i) : tree->topLevelItem(i);
-		if (kindOf(it) == Kind::Unsorted)
-			continue; /* Unsorted is derived, never stored. */
+		if (kindOf(it) == Kind::Unsorted || kindOf(it) == Kind::Favorites)
+			continue; /* Derived sections are never stored. */
 		arr.append(serializeItem(it));
 	}
 	return arr;
@@ -892,6 +896,68 @@ void StacksDock::reconcile()
 	applyFilter();
 }
 
+QTreeWidgetItem *StacksDock::original(QTreeWidgetItem *item) const
+{
+	if (!item || !item->parent() || kindOf(item->parent()) != Kind::Favorites)
+		return item;
+	const QString uuid = item->data(0, UuidRole).toString();
+	QList<QTreeWidgetItem *> items;
+	collectScenes(nullptr, items);
+	for (QTreeWidgetItem *it : items) {
+		if (it->data(0, UuidRole).toString() == uuid)
+			return it;
+	}
+	return nullptr;
+}
+
+void StacksDock::rebuildFavorites()
+{
+	QTreeWidgetItem *section = nullptr;
+	for (int i = 0; i < tree->topLevelItemCount(); i++) {
+		if (kindOf(tree->topLevelItem(i)) == Kind::Favorites) {
+			section = tree->topLevelItem(i);
+			break;
+		}
+	}
+	QList<QTreeWidgetItem *> items;
+	collectScenes(nullptr, items);
+	QList<QTreeWidgetItem *> favorites;
+	for (QTreeWidgetItem *it : items) {
+		if (it->data(0, FavoriteRole).toBool() && !it->data(0, MissingRole).toBool())
+			favorites.append(it);
+	}
+	if (favorites.isEmpty()) {
+		delete section;
+		return;
+	}
+	bool expanded = true;
+	if (!section) {
+		section = new QTreeWidgetItem();
+		section->setText(0, T("Favorites"));
+		section->setData(0, KindRole, static_cast<int>(Kind::Favorites));
+		section->setData(0, ColorRole, QStringLiteral("#FFC53D"));
+		section->setData(0, IconRole, QStringLiteral("star"));
+		section->setFlags(Qt::ItemIsEnabled);
+		tree->insertTopLevelItem(0, section);
+	} else {
+		expanded = section->isExpanded();
+		qDeleteAll(section->takeChildren());
+		if (tree->indexOfTopLevelItem(section) != 0) {
+			tree->takeTopLevelItem(tree->indexOfTopLevelItem(section));
+			tree->insertTopLevelItem(0, section);
+		}
+	}
+	for (QTreeWidgetItem *fav : favorites) {
+		/* A mirror: activating it activates the scene, edits go to the original. */
+		QTreeWidgetItem *mirror = makeScene(fav->data(0, UuidRole).toString(), fav->text(0));
+		mirror->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+		for (int role : {int(ColorRole), int(IconRole), int(ProgramRole), int(PreviewRole)})
+			mirror->setData(0, role, fav->data(0, role));
+		section->addChild(mirror);
+	}
+	section->setExpanded(expanded);
+}
+
 void StacksDock::updateIndicators()
 {
 	obs_source_t *program = obs_frontend_get_current_scene();
@@ -904,6 +970,13 @@ void StacksDock::updateIndicators()
 
 	QList<QTreeWidgetItem *> items;
 	collectScenes(nullptr, items);
+	for (int i = 0; i < tree->topLevelItemCount(); i++) {
+		QTreeWidgetItem *top = tree->topLevelItem(i);
+		if (kindOf(top) == Kind::Favorites) {
+			for (int j = 0; j < top->childCount(); j++)
+				items.append(top->child(j));
+		}
+	}
 	for (QTreeWidgetItem *it : items) {
 		const QString uuid = it->data(0, UuidRole).toString();
 		it->setData(0, ProgramRole, !uuid.isEmpty() && uuid == programUuid);
@@ -916,10 +989,17 @@ void StacksDock::applyFilter()
 	const QString query = fold(search->text().trimmed());
 	const bool favOnly = favoritesButton->isChecked();
 	const bool filtering = !query.isEmpty() || favOnly;
+	rebuildFavorites();
 
 	std::function<bool(QTreeWidgetItem *)> visit = [&](QTreeWidgetItem *it) -> bool {
 		const Kind k = kindOf(it);
 		bool visible = false;
+		if (k == Kind::Favorites) {
+			/* Hidden while filtering: the filtered tree already shows them. */
+			visible = !filtering && it->childCount() > 0;
+			it->setHidden(!visible);
+			return visible;
+		}
 		if (k == Kind::Scene) {
 			const bool missing = it->data(0, MissingRole).toBool();
 			visible = !missing && (query.isEmpty() || fold(it->text(0)).contains(query)) &&
@@ -1337,6 +1417,7 @@ void StacksDock::setColor(const QList<QTreeWidgetItem *> &items, const QString &
 		if (kindOf(it) != Kind::Unsorted)
 			it->setData(0, ColorRole, color);
 	}
+	applyFilter();
 	tree->viewport()->update();
 	markDirty();
 }
@@ -1353,6 +1434,7 @@ void StacksDock::chooseIcon(const QList<QTreeWidgetItem *> &items, QTreeWidgetIt
 		if (k == Kind::Scene || k == Kind::Stack)
 			it->setData(0, IconRole, name);
 	}
+	applyFilter();
 	tree->viewport()->update();
 	markDirty();
 }
@@ -1451,6 +1533,14 @@ void StacksDock::setNativeDockHidden(bool hidden)
 void StacksDock::onContextMenu(const QPoint &pos)
 {
 	QTreeWidgetItem *item = tree->itemAt(pos);
+	if (item && kindOf(item) == Kind::Favorites)
+		return;
+	if (item && item->parent() && kindOf(item->parent()) == Kind::Favorites) {
+		item = original(item);
+		if (!item)
+			return;
+		tree->clearSelection();
+	}
 	if (item && !item->isSelected()) {
 		tree->clearSelection();
 		item->setSelected(true);

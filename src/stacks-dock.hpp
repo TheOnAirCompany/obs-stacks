@@ -34,7 +34,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace stacks {
 
-enum class Kind : int { Scene = 1, Stack = 2, Separator = 3, Unsorted = 4 };
+enum class Kind : int { Scene = 1, Stack = 2, Separator = 3, Unsorted = 4, Favorites = 5 };
 
 enum Role : int {
 	KindRole = Qt::UserRole + 1,
@@ -111,6 +111,8 @@ private:
 	QTreeWidgetItem *makeSeparator(const QString &label);
 	QTreeWidgetItem *unsortedItem();
 	void moveUnsortedLast();
+	void rebuildFavorites();
+	QTreeWidgetItem *original(QTreeWidgetItem *item) const;
 	void collectScenes(QTreeWidgetItem *parent, QList<QTreeWidgetItem *> &out) const;
 	QTreeWidgetItem *insertionParent(int *row) const;
 

@@ -18,7 +18,7 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 
 ## What works in 0.1.0
 
-- Dock with **Program (LIVE)** and **Preview (PVW)** badges
+- Dock titled "Scenes" with **Program (PGM)** and **Preview (PVW)** badges, search and options at the bottom
 - Studio Mode aware click and double-click (click = preview, double-click = transition to Program)
 - Optional **safe click**: a single click never goes live, double-click does
 - Stacks with collapse / expand, nestable up to 4 levels
@@ -28,7 +28,7 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 - Organized and Compact display modes
 - Separators: plain line or labeled
 - 8-color palette plus a custom color, shown as a strip and as a stack tint
-- Favorites and a favorites-only filter
+- Favorites: a pinned "Favorites" section at the top plus a favorites-only filter
 - Accent- and case-insensitive search
 - **Unsorted** section that receives new scenes automatically
 - Drag & drop, and **Move to Stack** from the context menu
