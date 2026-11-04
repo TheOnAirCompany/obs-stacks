@@ -245,7 +245,7 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 		}
 		const QString label = index.data(Qt::DisplayRole).toString();
 		QColor line = color.isValid() ? color : pal.text().color();
-		line.setAlphaF(color.isValid() ? 0.9 : 0.35);
+		line.setAlphaF(color.isValid() ? 0.9f : 0.35f);
 		const int y = option.rect.center().y();
 		const QRect r = option.rect.adjusted(6, 0, -6, 0);
 		painter->setPen(QPen(line, 1));
@@ -260,7 +260,7 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 			const QFontMetrics fm(f);
 			const int tw = fm.horizontalAdvance(label);
 			QColor tc = color.isValid() ? color : pal.text().color();
-			tc.setAlphaF(0.75);
+			tc.setAlphaF(0.75f);
 			painter->setPen(tc);
 			painter->drawText(QRect(r.left(), r.top(), tw, r.height()), Qt::AlignVCenter, label);
 			painter->setPen(QPen(line, 1));
@@ -298,7 +298,7 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 	if (missing) {
 		opt.font.setItalic(true);
 		QColor faded = pal.text().color();
-		faded.setAlphaF(0.45);
+		faded.setAlphaF(0.45f);
 		opt.palette.setColor(QPalette::Text, faded);
 	}
 
@@ -316,7 +316,7 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 	if (color.isValid() && !(opt.state & QStyle::State_Selected) &&
 	    ((k == Kind::Stack && tintStack) || (k == Kind::Scene && tintScene))) {
 		QColor tint = color;
-		tint.setAlphaF(k == Kind::Stack ? 0.16 : 0.12);
+		tint.setAlphaF(k == Kind::Stack ? 0.16f : 0.12f);
 		painter->fillRect(option.rect, tint);
 	}
 
@@ -374,7 +374,7 @@ void StacksDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option
 	}
 	if (countW > 0) {
 		QColor muted = pal.text().color();
-		muted.setAlphaF(0.5);
+		muted.setAlphaF(0.5f);
 		painter->setPen(muted);
 		painter->setFont(option.font);
 		painter->drawText(QRect(x - countW, option.rect.top(), countW - 4, option.rect.height()),
