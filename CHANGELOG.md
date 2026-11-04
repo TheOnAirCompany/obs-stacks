@@ -17,6 +17,7 @@ First working preview (unsigned).
 - Stacks with collapse and expand, nestable up to 4 levels.
 - Lucide icons (ISC) with a searchable picker.
 - Undo / redo of organization changes through OBS Edit > Undo.
+- Undoable scene deletion (same data as OBS, restores the stack placement, never switches Program).
 - JSON export and import of the organization.
 - Organized and Compact display modes.
 - Separators, as a line or with a label.

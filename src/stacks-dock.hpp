@@ -133,6 +133,10 @@ private:
 	QString currentJson() const;
 	void restoreSnapshot(const QString &json);
 	static void undoRedoCallback(const char *data);
+	static bool saveUndoSource(obs_scene_t *scene, obs_sceneitem_t *item, void *p);
+	static void removeSceneAndPrune(obs_source_t *source);
+	static void undoDeleteScene(const char *json);
+	static void redoDeleteScene(const char *name);
 	void exportJson();
 	void importJson();
 	void applyDisplayMode();

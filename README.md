@@ -32,7 +32,7 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 - Accent- and case-insensitive search
 - **Unsorted** section that receives new scenes automatically
 - Drag & drop, and **Move to Stack** from the context menu
-- Add, rename and delete scenes, with a confirmation on delete and a refusal to delete the scene that is on air
+- Add, rename and delete scenes, with a confirmation on delete, a refusal to delete the scene that is on air, and Edit > Undo that restores a deleted scene in its stack without switching Program
 - Dissolve a stack without deleting its scenes
 - First launch: the Stacks dock is placed next to the native Scenes dock and a dialog offers to hide the native one (Hide / Keep both / Not now)
 - Optional hiding of the native Scenes dock, from the Stacks menu at any time
@@ -43,7 +43,6 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 
 ## Not yet
 
-- Undo for scenes deleted from Stacks (use the native dock for undoable deletes)
 - Final design values (colors, sizes and spacing are still proposals)
 
 ## Install (macOS, unsigned preview)

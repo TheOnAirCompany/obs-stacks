@@ -45,6 +45,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <util/config-file.h>
 
 #include <algorithm>
+#include <cstring>
+#include <string>
+#include <vector>
 #include <functional>
 
 #include <plugin-support.h>
@@ -1198,9 +1201,104 @@ void StacksDock::deleteScene(QTreeWidgetItem *item)
 
 	const QString text = T("Confirm.DeleteScene").arg(item->text(0));
 	if (QMessageBox::question(this, T("Action.DeleteScene"), text, QMessageBox::Yes | QMessageBox::Cancel,
-				  QMessageBox::Cancel) == QMessageBox::Yes) {
-		obs_source_remove(src);
+				  QMessageBox::Cancel) != QMessageBox::Yes) {
+		obs_source_release(src);
+		return;
 	}
+
+	/* Same undo data as OBS's own scene removal, so Edit > Undo works.
+	 * The scene and the sources only it uses are saved; the UUID is kept,
+	 * so the restored scene returns to its place in its stack. */
+	obs_scene_t *scene = obs_scene_from_source(src);
+	obs_data_array_t *saved = obs_data_array_create();
+	obs_scene_enum_items(scene, saveUndoSource, saved);
+	obs_data_t *sceneData = obs_save_source(src);
+	obs_data_array_push_back(saved, sceneData);
+	obs_data_release(sceneData);
+
+	obs_data_t *undoData = obs_data_create();
+	obs_data_set_array(undoData, "sources_in_deleted_scene", saved);
+	obs_data_array_release(saved);
+
+	const std::string name = obs_source_get_name(src);
+	const QString label = T("Undo.DeleteScene").arg(QString::fromStdString(name));
+	obs_frontend_add_undo_redo_action(label.toUtf8().constData(), undoDeleteScene, redoDeleteScene,
+					  obs_data_get_json(undoData), name.c_str(), false);
+	obs_data_release(undoData);
+
+	removeSceneAndPrune(src);
+	obs_source_release(src);
+}
+
+bool StacksDock::saveUndoSource(obs_scene_t *, obs_sceneitem_t *item, void *p)
+{
+	obs_source_t *source = obs_sceneitem_get_source(item);
+	if (obs_obj_is_private(source) && !obs_source_removed(source))
+		return true;
+	auto *array = static_cast<obs_data_array_t *>(p);
+	const char *name = obs_source_get_name(source);
+	for (size_t i = 0; i < obs_data_array_count(array); i++) {
+		obs_data_t *d = obs_data_array_item(array, i);
+		const bool same = strcmp(name, obs_data_get_string(d, "name")) == 0;
+		obs_data_release(d);
+		if (same)
+			return true;
+	}
+	if (obs_source_is_group(source))
+		obs_scene_enum_items(obs_group_from_source(source), saveUndoSource, p);
+	obs_data_t *d = obs_save_source(source);
+	obs_data_array_push_back(array, d);
+	obs_data_release(d);
+	return true;
+}
+
+void StacksDock::removeSceneAndPrune(obs_source_t *source)
+{
+	obs_source_remove(source);
+	obs_enum_scenes(
+		[](void *, obs_source_t *s) {
+			if (strcmp(obs_source_get_id(s), "scene") == 0)
+				obs_scene_prune_sources(obs_scene_from_source(s));
+			return true;
+		},
+		nullptr);
+}
+
+void StacksDock::undoDeleteScene(const char *json)
+{
+	obs_data_t *base = obs_data_create_from_json(json);
+	obs_data_array_t *saved = obs_data_get_array(base, "sources_in_deleted_scene");
+	std::vector<obs_source_t *> created;
+	for (size_t i = 0; i < obs_data_array_count(saved); i++) {
+		obs_data_t *d = obs_data_array_item(saved, i);
+		obs_source_t *existing = obs_get_source_by_name(obs_data_get_string(d, "name"));
+		if (existing)
+			obs_source_release(existing);
+		else if (obs_source_t *src = obs_load_source(d))
+			created.push_back(src);
+		obs_data_release(d);
+	}
+	for (obs_source_t *src : created)
+		obs_source_load2(src);
+	for (obs_source_t *src : created)
+		obs_source_release(src);
+	obs_data_array_release(saved);
+	obs_data_release(base);
+	/* Program is never switched here, unlike OBS's own undo. */
+	if (instance)
+		QMetaObject::invokeMethod(instance, "reconcile", Qt::QueuedConnection);
+}
+
+void StacksDock::redoDeleteScene(const char *name)
+{
+	obs_source_t *src = obs_get_source_by_name(name);
+	if (!src)
+		return;
+	obs_source_t *program = obs_frontend_get_current_scene();
+	const bool onAir = program == src;
+	obs_source_release(program);
+	if (!onAir)
+		removeSceneAndPrune(src);
 	obs_source_release(src);
 }
 

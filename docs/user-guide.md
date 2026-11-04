@@ -27,7 +27,7 @@ Scenes appear in a tree. The scene on air shows a **LIVE** badge, the scene in P
 ## Scenes
 
 - **Add Scene** creates a scene in OBS (the name must be unique).
-- **Delete Scene** asks for confirmation. In 0.1.0 a deletion made from Stacks cannot be undone with Edit > Undo yet. A scene currently on air (Program) cannot be deleted.
+- **Delete Scene** asks for confirmation. Edit > Undo restores the scene, its sources and its place in its stack, without switching Program. A scene currently on air (Program) cannot be deleted.
 - **Dissolve Stack** removes the stack only; its scenes move up to the top level and are never deleted.
 
 ## Settings (Stacks menu)
@@ -49,4 +49,4 @@ Stacks only adds its own data to the collection. Scenes, sources and settings ar
 
 ## Not in 0.1.0
 
-Icons, compact / organized modes, undo for organization changes, JSON export / import, nested stacks, undo for scenes deleted from Stacks.
+Icons, compact / organized modes, undo for organization changes, JSON export / import, nested stacks.
