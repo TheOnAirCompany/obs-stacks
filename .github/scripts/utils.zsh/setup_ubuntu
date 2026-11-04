@@ -62,5 +62,76 @@ if (( ! (${skips[(Ie)all]} + ${skips[(Ie)deps]}) )) {
   }
 
   sudo apt-get install ${apt_args} ${_qt_packages}
+
+  # The OBS PPA does not publish packages for every Ubuntu release (none for 26.04 yet), and the distribution
+  # obs-studio package ships no development files. Build and install libobs and obs-frontend-api from the OBS
+  # version pinned in buildspec.json when no matching CMake package is available.
+  local -a _libobs_configs=(
+    /usr/lib/cmake/libobs/libobsConfig.cmake(N)
+    /usr/lib/*/cmake/libobs/libobsConfig.cmake(N)
+    /usr/local/lib/cmake/libobs/libobsConfig.cmake(N)
+  )
+
+  if (( ! ${#_libobs_configs} )) {
+    log_info 'No libobs development package found, building libobs from source...'
+
+    local _obs_version=$(jq -r '.dependencies."obs-studio".version' buildspec.json)
+    local _obs_src="${project_root}/.deps/obs-studio-${_obs_version}"
+
+    sudo apt-get install ${apt_args} \
+      cmake \
+      ninja-build \
+      pkg-config \
+      libasound2-dev \
+      libavcodec-dev \
+      libavdevice-dev \
+      libavfilter-dev \
+      libavformat-dev \
+      libavutil-dev \
+      libcurl4-openssl-dev \
+      libdrm-dev \
+      libgl1-mesa-dev \
+      libglvnd-dev \
+      libjansson-dev \
+      libpci-dev \
+      libpulse-dev \
+      libswresample-dev \
+      libswscale-dev \
+      libudev-dev \
+      libva-dev \
+      libwayland-dev \
+      libx11-dev \
+      libx11-xcb-dev \
+      libxcb-composite0-dev \
+      libxcb-randr0-dev \
+      libxcb-shm0-dev \
+      libxcb-xfixes0-dev \
+      libxcb-xinerama0-dev \
+      libxcb1-dev \
+      libxcomposite-dev \
+      libxinerama-dev \
+      libxkbcommon-dev \
+      uthash-dev \
+      zlib1g-dev
+
+    mkdir -p ${_obs_src:h}
+    if [[ ! -d ${_obs_src} ]] {
+      mkdir -p ${_obs_src}
+      curl --fail --location --silent --show-error \
+        "https://github.com/obsproject/obs-studio/archive/refs/tags/${_obs_version}.tar.gz" \
+        | tar --extract --gzip --strip-components=1 --directory=${_obs_src}
+    }
+
+    cmake -S ${_obs_src} -B ${_obs_src}/build_libobs -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
+      -DENABLE_FRONTEND=OFF \
+      -DENABLE_CORE_MODULES=OFF \
+      -DENABLE_SCRIPTING=OFF
+    cmake --build ${_obs_src}/build_libobs
+    sudo cmake --install ${_obs_src}/build_libobs
+    sudo ldconfig
+  }
+
   log_group
 }

@@ -5,6 +5,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-04
+
+First working preview (unsigned).
+
 ### Added
+- First-run placement of the dock and Hide / Keep both / Not now dialog.
+- No close button on the Stacks dock, kept when OBS locks or unlocks docks.
+- Stacks dock with Program (LIVE) and Preview (PVW) badges.
+- Studio Mode aware click and double-click, and an optional safe click setting.
+- Stacks (one level deep) with collapse and expand.
+- Separators, as a line or with a label.
+- 8-color palette and custom color, shown as a strip and as a stack tint.
+- Favorites and a favorites-only filter.
+- Accent- and case-insensitive search.
+- Unsorted section for new scenes.
+- Drag & drop and Move to Stack.
+- Add, rename and delete scene, with delete confirmation and refusal to delete the scene on air.
+- Dissolve a stack without deleting its scenes.
+- Optional hiding of the native Scenes dock.
+- English and French UI.
+- Organization persisted inside the scene collection, with UUID matching and name fallback.
 - Project scaffold based on obs-plugintemplate, updated for OBS Studio 33.0.1 (obs-deps and Qt6 2026-10-23, OBS 33 plugin layout with `manifest.json`).
 - Phase 1 documents: technical feasibility report, product requirements, UX/UI specification, software architecture, implementation plan and testing strategy.

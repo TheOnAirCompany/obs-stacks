@@ -1,5 +1,7 @@
 # Stacks for OBS — Documentation
 
+[User guide](user-guide.md) — how to use Stacks 0.1.0.
+
 Phase 1 (Discovery & feasibility) deliverables. All documents are drafts pending product-owner validation.
 
 1. [Technical feasibility report](01-technical-feasibility.md)

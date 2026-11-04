@@ -4,7 +4,7 @@
 
 Stacks for OBS is a native OBS Studio plugin that adds a scene explorer dock: collapsible **stacks**, real **separators**, **colors**, **icons**, **favorites** and **search** — without ever creating fake scenes, touching your sources or rewriting your scene collections.
 
-> **Status: Phase 1 — Discovery & feasibility.** No feature code yet. The product and technical documents below are drafts awaiting validation before implementation starts.
+> **Status: 0.1.0 preview.** A first working dock exists and is usable, but it is an early, unsigned preview. Many planned features are not implemented yet (see below), and design values are still proposals. Keep a backup of your scene collection before trying it.
 
 ## Why
 
@@ -15,6 +15,46 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 - a separator can never be put on air, never appears in transitions, obs-websocket or Stream Deck;
 - dissolving a stack never deletes a scene;
 - disabling or uninstalling the plugin leaves every scene, source and setting exactly as it was.
+
+## What works in 0.1.0
+
+- Dock with **Program (LIVE)** and **Preview (PVW)** badges
+- Studio Mode aware click and double-click (click = preview, double-click = transition to Program)
+- Optional **safe click**: a single click never goes live, double-click does
+- Stacks, one level deep, with collapse / expand
+- Separators: plain line or labeled
+- 8-color palette plus a custom color, shown as a strip and as a stack tint
+- Favorites and a favorites-only filter
+- Accent- and case-insensitive search
+- **Unsorted** section that receives new scenes automatically
+- Drag & drop, and **Move to Stack** from the context menu
+- Add, rename and delete scenes, with a confirmation on delete and a refusal to delete the scene that is on air
+- Dissolve a stack without deleting its scenes
+- First launch: the Stacks dock is placed next to the native Scenes dock and a dialog offers to hide the native one (Hide / Keep both / Not now)
+- Optional hiding of the native Scenes dock, from the Stacks menu at any time
+- The Stacks dock has no close button, like the native Scenes dock, so it cannot be closed by accident
+- English and French UI
+- Organization saved inside the scene collection, matched by scene UUID with a name fallback
+
+## Not yet
+
+- Icons
+- Compact and Organized display modes
+- Undo for organization changes
+- JSON export / import
+- Nested stacks
+- Keyboard shortcuts
+- Final design values (colors, sizes and spacing are still proposals)
+
+## Install (macOS, unsigned preview)
+
+1. Copy `obs-stacks.plugin` to `~/Library/Application Support/obs-studio/plugins/`.
+2. Restart OBS Studio 33.0.1 or later.
+3. Open **Docks > Stacks**.
+
+To uninstall, delete `obs-stacks.plugin` from that folder. Your scenes are never touched.
+
+The build is **unsigned**: macOS may block it the first time. If so, allow it in System Settings > Privacy & Security, or remove the quarantine flag with `xattr -dr com.apple.quarantine obs-stacks.plugin`. See the [user guide](docs/user-guide.md) for usage.
 
 ## Planned features
 
@@ -33,6 +73,7 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 
 | Document | Content |
 |----------|---------|
+| [User guide](docs/user-guide.md) | How to use Stacks 0.1.0 |
 | [Technical feasibility report](docs/01-technical-feasibility.md) | What OBS 33 allows, verified against its source code |
 | [Product requirements](docs/02-product-requirements.md) | Goals, personas, user stories, MVP scope |
 | [UX/UI specification](docs/03-ux-ui-specification.md) | Layouts, states, interactions, accessibility |
