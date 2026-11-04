@@ -1,0 +1,18 @@
+{
+    "display_name": "Stacks for OBS",
+    "id": "b3c5277e-a7b6-4a9f-92b9-60fee9ee7f95",
+    "version": "0.1.0",
+    "authors": [
+        "The OnAir Company"
+    ],
+    "name": "obs-stacks",
+    "description": "Organize your OBS scenes with stacks, separators, colors and icons.",
+    "long_description": "Stacks for OBS adds a scene explorer dock that organizes scenes into collapsible stacks, real separators, colors, icons and favorites, without ever creating fake scenes.",
+    "urls": {
+        "repository": "https://github.com/TheOnAirCompany/obs-stacks",
+        "website": "https://github.com/TheOnAirCompany/obs-stacks",
+        "support": "https://github.com/TheOnAirCompany/obs-stacks/issues"
+    },
+    "has_banner": false,
+    "has_icon": false
+}
