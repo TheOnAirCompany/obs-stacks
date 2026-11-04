@@ -2,13 +2,7 @@
 
 # Stacks for OBS
 
-[![Build](https://github.com/TheOnAirCompany/obs-stacks/actions/workflows/push.yaml/badge.svg?branch=main)](https://github.com/TheOnAirCompany/obs-stacks/actions/workflows/push.yaml)
-[![Release](https://img.shields.io/github/v/release/TheOnAirCompany/obs-stacks?include_prereleases&sort=semver)](https://github.com/TheOnAirCompany/obs-stacks/releases)
-[![Downloads](https://img.shields.io/github/downloads/TheOnAirCompany/obs-stacks/total)](https://github.com/TheOnAirCompany/obs-stacks/releases)
-[![OBS Studio](https://img.shields.io/badge/OBS%20Studio-33.0.1%2B-302E31?logo=obsstudio&logoColor=white)](https://obsproject.com)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-informational)](#install)
-[![Languages](https://img.shields.io/badge/languages-English%20%7C%20Fran%C3%A7ais-blue)](data/locale)
-[![License](https://img.shields.io/github/license/TheOnAirCompany/obs-stacks)](LICENSE)
+[![Build](https://github.com/TheOnAirCompany/obs-stacks/actions/workflows/push.yaml/badge.svg?branch=main)](https://github.com/TheOnAirCompany/obs-stacks/actions/workflows/push.yaml) [![Release](https://img.shields.io/github/v/release/TheOnAirCompany/obs-stacks?include_prereleases&sort=semver)](https://github.com/TheOnAirCompany/obs-stacks/releases) [![Downloads](https://img.shields.io/github/downloads/TheOnAirCompany/obs-stacks/total)](https://github.com/TheOnAirCompany/obs-stacks/releases) [![OBS Studio](https://img.shields.io/badge/OBS%20Studio-33.0.1%2B-302E31?logo=obsstudio&logoColor=white)](https://obsproject.com) [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-informational)](#install) [![Languages](https://img.shields.io/badge/languages-English%20%7C%20Fran%C3%A7ais-blue)](data/locale) [![License](https://img.shields.io/github/license/TheOnAirCompany/obs-stacks)](LICENSE)
 
 **A better way to organize your OBS scenes.**
 
