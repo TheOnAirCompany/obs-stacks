@@ -78,9 +78,9 @@ Download the file for your system from the [latest release](https://github.com/T
 
 | System | File | How to install |
 |---|---|---|
-| macOS 13+ (Apple Silicon and Intel) | `obs-stacks-<version>-macos-universal.pkg` | Open the package and follow the installer. The build is not notarized yet: if macOS blocks it, right-click the package and choose *Open*, or allow it in *System Settings > Privacy & Security*. |
+| macOS 13+ (Apple Silicon and Intel) | `obs-stacks-<version>-macos-universal.pkg` | Open the package and follow the installer (it installs for the current user). The package is not notarized yet: if macOS blocks it, right-click it and choose *Open*, or allow it in *System Settings > Privacy & Security*. |
 | Windows 10/11 x64 | `obs-stacks-<version>-windows-x64.zip` | Extract the `obs-stacks` folder into `C:\ProgramData\obs-studio\plugins\`. |
-| Ubuntu 26.04 x86_64 | `obs-stacks-<version>-ubuntu-26.04-x86_64.deb` | `sudo apt install ./obs-stacks-<version>-ubuntu-26.04-x86_64.deb` (for a system-wide OBS Studio 33.0.1+, not Flatpak). |
+| Ubuntu x86_64 | `obs-stacks-<version>-x86_64-linux-gnu.deb` | `sudo apt install ./obs-stacks-<version>-x86_64-linux-gnu.deb`. Needs the `obs-studio` package **33 or later** installed system-wide (Ubuntu 26.04 itself ships 32.1; Flatpak is not supported by this package). |
 
 Restart OBS. On first launch Stacks places its dock next to the native Scenes dock and asks whether to hide the native one. You can change that later from the **⋯** menu, or from OBS's **Docks** menu.
 
