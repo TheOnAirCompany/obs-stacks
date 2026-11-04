@@ -34,6 +34,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QPainterPath>
 #include <QPushButton>
 #include <QSet>
+#include <QShortcut>
 #include <QVBoxLayout>
 
 #include <obs-module.h>
@@ -384,6 +385,34 @@ StacksDock::StacksDock(QWidget *parent) : QWidget(parent)
 	connect(tree, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem *) { markDirty(); });
 	connect(search, &QLineEdit::textChanged, this, &StacksDock::applyFilter);
 	connect(favoritesButton, &QToolButton::toggled, this, &StacksDock::applyFilter);
+
+	/* Keyboard: F2 / Return rename (like OBS on macOS), Delete removes. */
+	auto withItem = [this](auto fn) {
+		return [this, fn] {
+			QTreeWidgetItem *item = tree->currentItem();
+			if (!item)
+				return;
+			busy++;
+			fn(item);
+			busy--;
+			if (busy == 0 && pendingReconcile)
+				reconcile();
+		};
+	};
+	auto *renameKey = new QShortcut(QKeySequence(Qt::Key_F2), tree, nullptr, nullptr, Qt::WidgetShortcut);
+	connect(renameKey, &QShortcut::activated, this, withItem([this](QTreeWidgetItem *it) { renameItem(it); }));
+	auto *returnKey = new QShortcut(QKeySequence(Qt::Key_Return), tree, nullptr, nullptr, Qt::WidgetShortcut);
+	connect(returnKey, &QShortcut::activated, this, withItem([this](QTreeWidgetItem *it) { renameItem(it); }));
+	auto removeItem = withItem([this](QTreeWidgetItem *it) {
+		if (kindOf(it) == Kind::Scene)
+			deleteScene(it);
+		else
+			deleteOrgItem(it);
+	});
+	for (const QKeySequence &seq : {QKeySequence(QKeySequence::Delete), QKeySequence(Qt::Key_Backspace)}) {
+		auto *del = new QShortcut(seq, tree, nullptr, nullptr, Qt::WidgetShortcut);
+		connect(del, &QShortcut::activated, this, removeItem);
+	}
 
 	saveTimer.setSingleShot(true);
 	saveTimer.setInterval(1500);

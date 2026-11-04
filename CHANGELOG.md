@@ -24,6 +24,7 @@ First working preview (unsigned).
 - Add, rename and delete scene, with delete confirmation and refusal to delete the scene on air.
 - Dissolve a stack without deleting its scenes.
 - Optional hiding of the native Scenes dock.
+- Keyboard: F2 / Return to rename, Delete / Backspace to delete.
 - English and French UI.
 - Organization persisted inside the scene collection, with UUID matching and name fallback.
 - Project scaffold based on obs-plugintemplate, updated for OBS Studio 33.0.1 (obs-deps and Qt6 2026-10-23, OBS 33 plugin layout with `manifest.json`).

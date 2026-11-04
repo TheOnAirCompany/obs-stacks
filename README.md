@@ -33,6 +33,7 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 - First launch: the Stacks dock is placed next to the native Scenes dock and a dialog offers to hide the native one (Hide / Keep both / Not now)
 - Optional hiding of the native Scenes dock, from the Stacks menu at any time
 - The Stacks dock has no close button, like the native Scenes dock, so it cannot be closed by accident
+- Keyboard: F2 or Return renames, Delete or Backspace deletes (with confirmation for scenes)
 - English and French UI
 - Organization saved inside the scene collection, matched by scene UUID with a name fallback
 
@@ -43,7 +44,7 @@ Stacks keeps OBS as the single source of truth for scenes and only stores *organ
 - Undo for organization changes
 - JSON export / import
 - Nested stacks
-- Keyboard shortcuts
+- Undo for scenes deleted from Stacks (use the native dock for undoable deletes)
 - Final design values (colors, sizes and spacing are still proposals)
 
 ## Install (macOS, unsigned preview)
