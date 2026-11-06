@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 
 - Delete several scenes at once: select them, then Delete Scenes… in the context menu (or the Delete key). One confirmation and one Edit > Undo step for all of them; the scene on air is kept.
+- API for other plugins (docs/INTEGRATION.md): `stacks_get_organization` and `stacks_place_scene` proc handlers and a `stacks_changed` signal. Layouts for OBS uses them to show the stacks in its scene navigator and to file the scenes it creates.
 
 ## [0.1.1] - 2026-11-06
 

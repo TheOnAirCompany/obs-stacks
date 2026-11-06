@@ -1040,6 +1040,77 @@ void StacksDock::markDirty(bool undoable)
 	}
 	snapshot = now;
 	saveTimer.start();
+	publishChanged();
+}
+
+/* ---------------------------- API for other plugins --------------------- */
+
+QString StacksDock::organizationJson() const
+{
+	return loaded && !readOnly ? currentJson() : lastJson;
+}
+
+void StacksDock::publishChanged()
+{
+	if (publishPosted)
+		return;
+	publishPosted = true;
+	QTimer::singleShot(0, this, [this] {
+		publishPosted = false;
+		const QString now = organizationJson();
+		if (now == publishedJson)
+			return;
+		publishedJson = now;
+		calldata_t cd;
+		calldata_init(&cd);
+		signal_handler_signal(obs_get_signal_handler(), "stacks_changed", &cd);
+		calldata_free(&cd);
+	});
+}
+
+bool StacksDock::placeScene(const QString &uuid, const QString &stackPath)
+{
+	if (!loaded || readOnly || uuid.isEmpty() || stackPath.trimmed().isEmpty())
+		return false;
+	/* The stack, by name, " / " between nested levels. */
+	QTreeWidgetItem *stack = nullptr;
+	for (const QString &part : stackPath.split(QStringLiteral(" / "))) {
+		const QString name = part.trimmed();
+		QTreeWidgetItem *found = nullptr;
+		const int n = stack ? stack->childCount() : tree->topLevelItemCount();
+		for (int i = 0; i < n && !found; i++) {
+			QTreeWidgetItem *it = stack ? stack->child(i) : tree->topLevelItem(i);
+			if (kindOf(it) == Kind::Stack && it->text(0) == name)
+				found = it;
+		}
+		if (!found)
+			return false;
+		stack = found;
+	}
+	auto findScene = [this, &uuid]() -> QTreeWidgetItem * {
+		QList<QTreeWidgetItem *> items;
+		collectScenes(nullptr, items);
+		for (QTreeWidgetItem *it : items) {
+			if (it->data(0, UuidRole).toString() == uuid && !it->data(0, MissingRole).toBool())
+				return it;
+		}
+		return nullptr;
+	};
+	QTreeWidgetItem *scene = findScene();
+	if (!scene) {
+		/* A scene made a moment ago: Stacks has not seen it yet. */
+		obs_source_t *src = sceneByUuid(uuid);
+		if (!src)
+			return false;
+		obs_source_release(src);
+		reconcile();
+		scene = findScene();
+	}
+	if (!scene)
+		return false;
+	if (scene->parent() != stack)
+		moveToStack({scene}, stack); /* undoable, like a drag */
+	return true;
 }
 
 /* ---------------------------- sync -------------------------------------- */
@@ -1135,6 +1206,7 @@ void StacksDock::reconcile()
 	enforceTombstoneCaps();
 	updateIndicators();
 	applyFilter();
+	publishChanged();
 }
 
 void StacksDock::enforceTombstoneCaps()

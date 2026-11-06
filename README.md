@@ -105,6 +105,7 @@ See the [user guide](docs/user-guide.md) for details.
 | [Software architecture](docs/04-software-architecture.md) | Components, data model, events, persistence, ADRs |
 | [Implementation plan](docs/05-implementation-plan.md) | Phased, dependency-ordered tasks |
 | [Testing strategy](docs/06-testing-strategy.md) | Unit, integration, manual, performance and data-safety tests |
+| [Integration](docs/INTEGRATION.md) | Proc handlers and signal for other plugins (read the organization, file a scene into a stack) |
 
 ## Compatibility
 

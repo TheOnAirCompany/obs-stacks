@@ -98,6 +98,12 @@ public:
 
 	void handleFrontendEvent(enum obs_frontend_event event);
 
+	/* Public API for other plugins (docs/INTEGRATION.md). UI thread only. */
+	QString organizationJson() const;
+	bool placeScene(const QString &uuid, const QString &stackPath);
+	/* Emits the global "stacks_changed" signal once, later, if the organization changed. */
+	void publishChanged();
+
 public slots:
 	void reconcile();
 	void updateIndicators();
@@ -198,6 +204,8 @@ private:
 	bool safeClick = false;
 	bool hideNative = false;
 	QString lastJson;
+	QString publishedJson;
+	bool publishPosted = false;
 };
 
 } // namespace stacks
