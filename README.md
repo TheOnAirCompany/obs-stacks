@@ -12,7 +12,7 @@ Stacks for OBS is a native OBS Studio plugin that replaces the flat Scenes list 
 
 ![Stacks for OBS in OBS Studio 33](docs/images/overview.png)
 
-> **Status: 0.1.1 preview.** Usable and tested in OBS Studio 33.0.1, but early. The macOS package is signed and notarized; Windows and Linux packages are not signed. Keep a backup of your scene collection before trying it, and report anything odd in [Issues](https://github.com/TheOnAirCompany/obs-stacks/issues).
+> **Status: 0.1.2 preview.** Usable and tested in OBS Studio 33.0.1, but early. The macOS package is signed and notarized; Windows and Linux packages are not signed. Keep a backup of your scene collection before trying it, and report anything odd in [Issues](https://github.com/TheOnAirCompany/obs-stacks/issues).
 
 ## Why
 
