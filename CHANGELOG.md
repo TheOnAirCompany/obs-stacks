@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-06
+
+### Changed
+
+- The macOS package is signed (Developer ID) and notarized: macOS installs it without warning.
+
 ## [0.1.0] - 2026-11-04
 
 First working preview (unsigned).

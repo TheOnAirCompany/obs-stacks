@@ -12,7 +12,7 @@ Stacks for OBS is a native OBS Studio plugin that replaces the flat Scenes list 
 
 ![Stacks for OBS in OBS Studio 33](docs/images/overview.png)
 
-> **Status: 0.1.0 preview.** Usable and tested in OBS Studio 33.0.1, but early and unsigned. Keep a backup of your scene collection before trying it, and report anything odd in [Issues](https://github.com/TheOnAirCompany/obs-stacks/issues).
+> **Status: 0.1.1 preview.** Usable and tested in OBS Studio 33.0.1, but early. The macOS package is signed and notarized; Windows and Linux packages are not signed. Keep a backup of your scene collection before trying it, and report anything odd in [Issues](https://github.com/TheOnAirCompany/obs-stacks/issues).
 
 ## Why
 
@@ -76,7 +76,7 @@ Download the file for your system from the [latest release](https://github.com/T
 
 | System | File | How to install |
 |---|---|---|
-| macOS 13+ (Apple Silicon and Intel) | `obs-stacks-<version>-macos-universal.pkg` | Open the package and follow the installer (it installs for the current user). The package is not notarized yet: if macOS blocks it, right-click it and choose *Open*, or allow it in *System Settings > Privacy & Security*. |
+| macOS 13+ (Apple Silicon and Intel) | `obs-stacks-<version>-macos-universal.pkg` | Open the package and follow the installer (it installs for the current user). The package is signed and notarized by Apple. |
 | Windows 10/11 x64 | `obs-stacks-<version>-windows-x64.zip` | Extract the `obs-stacks` folder into `C:\ProgramData\obs-studio\plugins\`. |
 | Ubuntu x86_64 | `obs-stacks-<version>-x86_64-linux-gnu.deb` | `sudo apt install ./obs-stacks-<version>-x86_64-linux-gnu.deb`. Needs the `obs-studio` package **33 or later** installed system-wide (Ubuntu 26.04 itself ships 32.1; Flatpak is not supported by this package). |
 
@@ -92,7 +92,7 @@ See the [user guide](docs/user-guide.md) for details.
 - A model separated from the widgets, with unit tests
 - Performance measurements with 250 to 500 scenes
 - Accessibility pass (screen readers, full keyboard navigation)
-- Signed and notarized macOS package, Windows installer
+- Windows installer
 
 ## Documentation
 
