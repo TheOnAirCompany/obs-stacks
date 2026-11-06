@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-07
+
 ### Added
 
 - Delete several scenes at once: select them, then Delete Scenes… in the context menu (or the Delete key). One confirmation and one Edit > Undo step for all of them; the scene on air is kept.
