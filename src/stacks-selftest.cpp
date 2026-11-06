@@ -39,6 +39,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <plugin-support.h>
 
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <vector>
 
@@ -298,6 +299,50 @@ void StacksDock::runSelfTest()
 		cleanupMissing(false);
 		QTreeWidgetItem *it = findItem(tree, "Plan large", Kind::Scene);
 		r->check(it == nullptr, "cleanup-missing");
+	});
+
+	/* 3b. Several scenes deleted at once: one confirmation, one undo step, program kept. */
+	auto selectScenes = [this](std::initializer_list<const char *> names) {
+		tree->clearSelection();
+		for (const char *n : names) {
+			if (QTreeWidgetItem *it = findItem(tree, QString::fromUtf8(n), Kind::Scene))
+				it->setSelected(true);
+		}
+	};
+	step(300, [] {
+		for (const char *n : {"Multi A", "Multi B", "Multi C"})
+			obs_scene_release(obs_scene_create(n));
+		setProgram("Cam 1");
+	});
+	step(800, [this, r, selectScenes] {
+		selectScenes({"Multi A", "Multi B", "Multi C"});
+		r->check(tree->selectedItems().size() == 3, "multi-select-3",
+			 QString::number(tree->selectedItems().size()));
+		deleteSelection(); /* the confirmation is answered Yes */
+	});
+	step(800, [r] {
+		r->check(!sourceExists("Multi A") && !sourceExists("Multi B") && !sourceExists("Multi C"),
+			 "multi-delete-all");
+		auto *main = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+		if (QAction *undo = main ? main->findChild<QAction *>("actionMainUndo") : nullptr)
+			undo->trigger();
+	});
+	step(1000, [this, r, selectScenes] {
+		r->check(sourceExists("Multi A") && sourceExists("Multi B") && sourceExists("Multi C"),
+			 "multi-undo-one-step");
+		selectScenes({"Multi A", "Multi B", "Cam 1"});
+		deleteSelection();
+	});
+	step(800, [this, r, selectScenes] {
+		r->check(!sourceExists("Multi A") && !sourceExists("Multi B"), "multi-delete-with-program");
+		r->check(sourceExists("Cam 1") && programName() == "Cam 1", "multi-delete-keeps-program",
+			 programName());
+		selectScenes({"Multi C"});
+		deleteSelection();
+	});
+	step(800, [this, r] {
+		r->check(!sourceExists("Multi C"), "single-delete-via-selection");
+		cleanupMissing(false);
 	});
 
 	/* 3. Caps: 201 tombstones show the notice, 2,001 are trimmed to 2,000. */

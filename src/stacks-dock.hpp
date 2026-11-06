@@ -133,6 +133,8 @@ private:
 	void addScene();
 	void renameItem(QTreeWidgetItem *item);
 	void deleteScene(QTreeWidgetItem *item);
+	bool deleteScenes(const QList<QTreeWidgetItem *> &items);
+	void deleteSelection();
 	void dissolveStack(QTreeWidgetItem *item);
 	void deleteOrgItem(QTreeWidgetItem *item);
 	void setColor(const QList<QTreeWidgetItem *> &items, const QString &color);
@@ -146,9 +148,9 @@ private:
 	void restoreSnapshot(const QString &json);
 	static void undoRedoCallback(const char *data);
 	static bool saveUndoSource(obs_scene_t *scene, obs_sceneitem_t *item, void *p);
-	static void removeSceneAndPrune(obs_source_t *source);
+	static void pruneScenes();
 	static void undoDeleteScene(const char *json);
-	static void redoDeleteScene(const char *name);
+	static void redoDeleteScenes(const char *json);
 	void exportJson();
 	void importJson();
 	void applyDisplayMode();
